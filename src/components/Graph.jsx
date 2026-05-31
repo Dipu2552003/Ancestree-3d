@@ -1,87 +1,62 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { OrbitControls, Html } from '@react-three/drei'
+import { OrbitControls, Html, Line } from '@react-three/drei'
 import { useThree, useFrame } from '@react-three/fiber'
-import useGraphStore from '../store/useGraphStore'
+import useGraphStore, { SHELL_RADII } from '../store/useGraphStore'
 import { useSimulation } from '../physics/useSimulation'
 import Node from './Node'
 import Edge from './Edge'
 
-const ORBIT_RADII = [120, 220, 320]
-
-const SEED_NODES = [
-  // Inner shell — foundational concepts
-  { label: 'Machine Learning',      category: 'concept', orbitRadius: 120 },
-  { label: 'Neural Networks',       category: 'concept', orbitRadius: 120 },
-  { label: 'Python',                category: 'skill',   orbitRadius: 120 },
-  { label: 'Linear Algebra',        category: 'fact',    orbitRadius: 120 },
-  { label: 'Backpropagation',       category: 'concept', orbitRadius: 120 },
-  // Middle shell — applied knowledge
-  { label: 'Deep Learning',         category: 'concept', orbitRadius: 220 },
-  { label: 'Data Wrangling',        category: 'skill',   orbitRadius: 220 },
-  { label: 'Gradient Descent',      category: 'fact',    orbitRadius: 220 },
-  { label: 'Activation Functions',  category: 'fact',    orbitRadius: 220 },
-  { label: 'Research Notes',        category: 'memory',  orbitRadius: 220 },
-  // Outer shell — goals and ideas
-  { label: 'Computer Vision',       category: 'idea',    orbitRadius: 320 },
-  { label: 'NLP',                   category: 'idea',    orbitRadius: 320 },
-  { label: 'Transformers',          category: 'concept', orbitRadius: 320 },
-  { label: 'Build Knowledge Graph', category: 'idea',    orbitRadius: 320 },
-  { label: 'Career Roadmap',        category: 'memory',  orbitRadius: 320 },
+const SHELL_LABELS = [
+  'Great-grandparents',
+  'Grandparents',
+  'Parents',
+  'You',
+  'Children',
+  'Grandchildren',
 ]
 
-// Pairs of labels — resolved to IDs after seeding.
-const SEED_EDGES = [
-  ['Machine Learning',     'Neural Networks'],
-  ['Machine Learning',     'Data Wrangling'],
-  ['Linear Algebra',       'Neural Networks'],
-  ['Neural Networks',      'Backpropagation'],
-  ['Neural Networks',      'Deep Learning'],
-  ['Backpropagation',      'Gradient Descent'],
-  ['Gradient Descent',     'Activation Functions'],
-  ['Data Wrangling',       'Deep Learning'],
-  ['Deep Learning',        'Computer Vision'],
-  ['Deep Learning',        'NLP'],
-  ['NLP',                  'Transformers'],
-  ['Transformers',         'Computer Vision'],
-  ['Build Knowledge Graph','Research Notes'],
-  ['Career Roadmap',       'Build Knowledge Graph'],
-]
+// 3 great circles (equator + 2 meridians) for a sphere shell of radius r.
+function shellCircles(r) {
+  const pts = (fn) => Array.from({ length: 129 }, (_, i) => fn((i / 128) * Math.PI * 2))
+  return [
+    pts((t) => [r * Math.cos(t), 0,              r * Math.sin(t)]),
+    pts((t) => [r * Math.cos(t), r * Math.sin(t), 0             ]),
+    pts((t) => [0,               r * Math.sin(t), r * Math.cos(t)]),
+  ]
+}
+
 
 export default function Graph() {
   const nodes          = useGraphStore((s) => s.nodes)
   const edges          = useGraphStore((s) => s.edges)
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId)
+  const fetchGraph     = useGraphStore((s) => s.fetchGraph)
+  const isDark         = useGraphStore((s) => s.isDark)
+  const showShells     = useGraphStore((s) => s.showShells)
+  const showEdges      = useGraphStore((s) => s.showEdges)
 
   const { camera } = useThree()
 
   // fly-to target: { x, y, z } or null
   const flyTarget = useRef(null)
 
-  // seed nodes + edges once on first mount
+  // Load the family graph from the API on mount.
   useEffect(() => {
-    if (useGraphStore.getState().nodes.length > 0) return
-    SEED_NODES.forEach(({ label, category, orbitRadius }) => {
-      useGraphStore.getState().addNode(label, category, orbitRadius)
-    })
-    const { nodes } = useGraphStore.getState()
-    const byLabel = Object.fromEntries(nodes.map((n) => [n.label, n.id]))
-    SEED_EDGES.forEach(([a, b]) => {
-      const sid = byLabel[a], tid = byLabel[b]
-      if (sid && tid) useGraphStore.getState().addEdge(sid, tid)
-    })
-  }, [])
+    fetchGraph()
+  }, [fetchGraph])
 
   // update fly-to target whenever selected node changes
   useEffect(() => {
     if (!selectedNodeId) { flyTarget.current = null; return }
     const node = useGraphStore.getState().nodes.find((n) => n.id === selectedNodeId)
     if (!node) return
-    // aim camera at a point 200 units in front of the node along its outward direction
+    // Move camera to a point 250 units outward along the node's radial direction
     const len = Math.sqrt(node.x * node.x + node.y * node.y + node.z * node.z) || 1
+    const dist = node.orbitRadius + 250
     flyTarget.current = {
-      x: node.x + (node.x / len) * 200,
-      y: node.y + (node.y / len) * 200,
-      z: node.z + (node.z / len) * 200,
+      x: (node.x / len) * dist,
+      y: (node.y / len) * dist,
+      z: (node.z / len) * dist,
     }
   }, [selectedNodeId])
 
@@ -109,19 +84,40 @@ export default function Graph() {
 
   return (
     <>
-      <OrbitControls enableDamping dampingFactor={0.08} />
-      <ambientLight intensity={0.2} />
-      <pointLight position={[200, 200, 200]} intensity={1.5} />
+      <OrbitControls enableDamping dampingFactor={0.08} target={[0, 0, 0]} />
+      <ambientLight intensity={0.3} />
+      <pointLight position={[0, 0, 0]} intensity={0.8} />
+      <pointLight position={[500, 500, 500]} intensity={1.0} />
 
-      {/* Orbit shell guide rings — very subtle, non-interactive */}
-      {ORBIT_RADII.map((r) => (
-        <mesh key={r}>
-          <sphereGeometry args={[r, 36, 36]} />
-          <meshBasicMaterial color="white" wireframe transparent opacity={0.04} />
-        </mesh>
-      ))}
+      {/* Sphere shell guides — 3 great circles per generation shell */}
+      {showShells && SHELL_RADII.map((r, idx) => {
+        const isSelf = idx === 3
+        const color  = isSelf ? '#EA580C' : 'white'
+        const op     = isSelf ? 0.22 : 0.08
+        const lw     = isSelf ? 1.0 : 0.5
+        return (
+          <group key={r}>
+            {shellCircles(r).map((pts, ci) => (
+              <Line key={ci} points={pts} color={color} lineWidth={lw} transparent opacity={op} />
+            ))}
+            <Html position={[r + 16, 0, 0]} center>
+              <span style={{
+                color: isSelf ? '#EA580C' : 'rgba(255,255,255,0.3)',
+                fontSize: 9,
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+                fontFamily: 'system-ui, sans-serif',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                {SHELL_LABELS[idx]}
+              </span>
+            </Html>
+          </group>
+        )
+      })}
 
-      {edges.map((edge) => {
+      {showEdges && edges.map((edge) => {
         const src = nodeMap[edge.sourceId]
         const tgt = nodeMap[edge.targetId]
         if (!src || !tgt) return null
@@ -129,21 +125,7 @@ export default function Graph() {
       })}
 
       {nodes.map((node) => (
-        <group key={node.id}>
-          <Node node={node} />
-          <Html position={[node.x, node.y + 14, node.z]} center>
-            <span style={{
-              color: '#fff',
-              fontSize: 12,
-              whiteSpace: 'nowrap',
-              pointerEvents: 'none',
-              textShadow: '0 1px 4px rgba(0,0,0,0.8)',
-              userSelect: 'none',
-            }}>
-              {node.label}
-            </span>
-          </Html>
-        </group>
+        <Node key={node.id} node={node} />
       ))}
     </>
   )

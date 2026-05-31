@@ -1,16 +1,16 @@
-const CATEGORIES = [
-  { label: 'concept', color: '#6c63ff' },
-  { label: 'memory',  color: '#00d4aa' },
-  { label: 'skill',   color: '#ffd93d' },
-  { label: 'fact',    color: '#74b9ff' },
-  { label: 'idea',    color: '#fd79a8' },
+const NODE_STATES = [
+  { label: 'You',      color: '#EA580C' },
+  { label: 'Member',   color: '#6c63ff' },
+  { label: 'Invited',  color: '#ffd93d' },
+  { label: 'Proxy',    color: '#aaaacc' },
+  { label: 'Deceased', color: '#94A3B8' },
 ]
 
 export default function Legend() {
   return (
     <div style={s.panel}>
-      <p style={s.heading}>Categories</p>
-      {CATEGORIES.map(({ label, color }) => (
+      <p style={s.heading}>Node States</p>
+      {NODE_STATES.map(({ label, color }) => (
         <div key={label} style={s.row}>
           <span style={{ ...s.dot, background: color }} />
           <span style={s.label}>{label}</span>
