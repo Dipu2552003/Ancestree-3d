@@ -1,46 +1,82 @@
 import { create } from 'zustand'
 import { api } from '../lib/api'
+import { getLayout } from '../layouts'
+import SphereLayout, { getSphereOrbitRadius, sphereShellRadius } from '../layouts/SphereLayout'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
-// Sphere shell radius per generation.
-// Nucleus = oldest ancestors (small r). You/self = mid-shell. Descendants expand outward.
-export const SHELL_RADII = [80, 160, 240, 320, 400, 480]
-
-const GENERATION_RADIUS = {
-  'Great-Grandfather':  80,
-  'Great-Grandmother':  80,
-  'Grandfather':       160,
-  'Grandmother':       160,
-  'Father':            240,
-  'Mother':            240,
-  'Uncle':             240,
-  'Aunt':              240,
-  'You':               320,
-  'Husband':           320,
-  'Wife':              320,
-  'Brother':           320,
-  'Sister':            320,
-  'Cousin':            320,
-  'Son':               400,
-  'Daughter':          400,
-  'Son-in-Law':        400,
-  'Daughter-in-Law':   400,
-  'Grandson':          480,
-  'Granddaughter':     480,
+// Returns sphere shell radius using BFS-computed generation when available,
+// falling back to string-based lookup for nodes without one.
+function shellRadius(nodeOrData) {
+  if (typeof nodeOrData.generation === 'number') return sphereShellRadius(nodeOrData.generation)
+  return getSphereOrbitRadius(nodeOrData)
 }
 
-function shellRadius(data) {
-  if (data.isSelf) return 320
-  return GENERATION_RADIUS[data.relationshipToSelf] ?? 320
+// Map relationship string → generation number.
+// All keys are lowercase — nodeGeneration() normalises the incoming string.
+// Generation 0 = self, +N = Nth ancestor generation, −N = Nth descendant.
+const RELATIONSHIP_TO_GENERATION = {
+  // +3
+  'great-grandfather': 3, 'great-grandmother': 3,
+  'great grandfather': 3, 'great grandmother': 3,
+  'great-grandpa': 3, 'great-grandma': 3,
+  'great grandpa': 3, 'great grandma': 3,
+  'great-grandfather-in-law': 3, 'great-grandmother-in-law': 3,
+
+  // +2
+  'grandfather': 2, 'grandmother': 2,
+  'grandpa': 2, 'grandma': 2, 'nana': 2, 'nani': 2, 'dada': 2, 'dadi': 2,
+  'nanaji': 2, 'dadaji': 2, 'nanabhai': 2,
+  'great-uncle': 2, 'great-aunt': 2,
+  'great uncle': 2, 'great aunt': 2,
+  'grandfather-in-law': 2, 'grandmother-in-law': 2,
+
+  // +1  (parents and their siblings / spouses)
+  'father': 1, 'mother': 1,
+  'dad': 1, 'mom': 1, 'papa': 1, 'mama': 1, 'maa': 1, 'ma': 1,
+  'uncle': 1, 'aunt': 1, 'chacha': 1, 'chachi': 1, 'mama-uncle': 1,
+  'step-father': 1, 'step-mother': 1, 'stepfather': 1, 'stepmother': 1,
+  'father-in-law': 1, 'mother-in-law': 1,
+  'sasur': 1, 'saas': 1,
+
+  // 0  (self and same generation)
+  'you': 0, 'self': 0,
+  'husband': 0, 'wife': 0, 'spouse': 0, 'partner': 0,
+  'brother': 0, 'sister': 0,
+  'brother-in-law': 0, 'sister-in-law': 0,
+  'bhai': 0, 'behen': 0, 'didi': 0,
+  'step-brother': 0, 'step-sister': 0, 'stepbrother': 0, 'stepsister': 0,
+  'half-brother': 0, 'half-sister': 0,
+  'cousin': 0, 'cousin brother': 0, 'cousin sister': 0,
+  // unknown relationships default to same level as self
+  'relative': 0, 'unknown': 0, '': 0,
+
+  // -1  (children and nephews / nieces)
+  'son': -1, 'daughter': -1, 'beta': -1, 'beti': -1,
+  'son-in-law': -1, 'daughter-in-law': -1,
+  'step-son': -1, 'step-daughter': -1, 'stepson': -1, 'stepdaughter': -1,
+  'nephew': -1, 'niece': -1,
+
+  // -2
+  'grandson': -2, 'granddaughter': -2,
+  'pota': -2, 'poti': -2, 'nati': -2, 'nata': -2,
+  'great-nephew': -2, 'great-niece': -2,
+  'grandnephew': -2, 'grandniece': -2,
+
+  // -3
+  'great-grandson': -3, 'great-granddaughter': -3,
 }
 
-// Place a node uniformly at random on the surface of a sphere of radius r.
-function randomOnSphere(r) {
-  const u     = Math.random() * 2 - 1
-  const theta = Math.random() * Math.PI * 2
-  const s     = Math.sqrt(1 - u * u)
-  return { x: r * s * Math.cos(theta), y: r * s * Math.sin(theta), z: r * u }
+function nodeGeneration(data) {
+  if (data.isSelf) return 0
+  const rel = (data.relationshipToSelf ?? '').trim().toLowerCase()
+  // Exact match first
+  if (rel in RELATIONSHIP_TO_GENERATION) return RELATIONSHIP_TO_GENERATION[rel]
+  // Partial match — handles "Relative Relative", "Great Grandfather", etc.
+  for (const [key, gen] of Object.entries(RELATIONSHIP_TO_GENERATION)) {
+    if (key && rel.includes(key)) return gen
+  }
+  return 0  // safe default: same ring as self rather than a wrong formula
 }
 
 const NODE_COLOR = {
@@ -59,16 +95,29 @@ function nodeColor(data) {
 
 // Map a graph API node (shape: { id, data: { personId, fullName, ... } })
 // to the flat store node shape the 3D scene expects.
-function apiNodeToStore(apiNode) {
+// Accepts an optional layout (defaults to SphereLayout for backward compat).
+// Cone ring radius formula — mirrors ConeLayout.js constants
+const CONE_MAX_GEN = 3
+const CONE_RADIUS_STEP = 90
+function coneRingRadius(gen) {
+  return Math.max(CONE_RADIUS_STEP, (CONE_MAX_GEN + 1 - gen) * CONE_RADIUS_STEP)
+}
+
+function apiNodeToStore(apiNode, layout = SphereLayout) {
   const d   = apiNode.data
-  const r   = shellRadius(d)
-  const pos = randomOnSphere(r)
+  const gen = nodeGeneration(d)
+  // Use the layout-appropriate orbit radius so camera fly-to works correctly.
+  // Cone → XZ ring radius (derived from generation). Sphere → sphere shell radius.
+  const r = layout.id === 'cone' ? coneRingRadius(gen) : shellRadius(d)
+  const nodeForLayout = { ...d, orbitRadius: r, generation: gen }
+  const pos = layout.getInitialPosition(nodeForLayout)
   return {
     // 3D physics fields
     id: d.personId,
     label: d.fullName,
     category: d.nodeState,
     orbitRadius: r,
+    generation: gen,
     x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: 0, vz: 0,
     color: nodeColor(d),
     // API fields preserved for the panel
@@ -103,6 +152,68 @@ function apiEdgeToStore(apiEdge) {
   }
 }
 
+// ── BFS generation computation (mirrors 2D computeGenerations.ts) ──────────
+// 3D cone convention: self=0, parents=+1, grandparents=+2, children=-1 ...
+// (opposite sign from the 2D app because 3D y-axis goes UP)
+//
+// Uses actual edge structure — ignores relationshipToSelf strings entirely.
+// This is the reliable source of truth: if the graph is connected from self,
+// every reachable node gets the correct orbit ring.
+
+function computeGenerations3D(nodes, edges) {
+  const gens = new Map()
+  const selfNode = nodes.find(n => n.isSelf)
+  if (!selfNode) {
+    // No self node — fall back to generation field already on each node
+    nodes.forEach(n => gens.set(n.id, n.generation ?? 0))
+    return gens
+  }
+
+  gens.set(selfNode.id, 0)
+  const queue   = [{ id: selfNode.id, gen: 0 }]
+  const visited = new Set([selfNode.id])
+
+  while (queue.length > 0) {
+    const { id, gen } = queue.shift()
+
+    for (const e of edges) {
+      const rel = (e.relType ?? '').toUpperCase()
+
+      if (rel === 'PARENT_OF') {
+        // source is parent → target is child
+        if (e.sourceId === id && !visited.has(e.targetId)) {
+          visited.add(e.targetId)
+          gens.set(e.targetId, gen - 1)           // child: one ring lower
+          queue.push({ id: e.targetId, gen: gen - 1 })
+        }
+        if (e.targetId === id && !visited.has(e.sourceId)) {
+          visited.add(e.sourceId)
+          gens.set(e.sourceId, gen + 1)            // parent: one ring higher
+          queue.push({ id: e.sourceId, gen: gen + 1 })
+        }
+      } else if (rel === 'SPOUSE_OF') {
+        if (e.sourceId === id && !visited.has(e.targetId)) {
+          visited.add(e.targetId)
+          gens.set(e.targetId, gen)                // spouse: same ring
+          queue.push({ id: e.targetId, gen })
+        }
+        if (e.targetId === id && !visited.has(e.sourceId)) {
+          visited.add(e.sourceId)
+          gens.set(e.sourceId, gen)
+          queue.push({ id: e.sourceId, gen })
+        }
+      }
+    }
+  }
+
+  // Unreachable nodes (no path from self) default to gen 0
+  for (const n of nodes) {
+    if (!gens.has(n.id)) gens.set(n.id, 0)
+  }
+
+  return gens
+}
+
 // ── store ──────────────────────────────────────────────────────────────────
 
 const useGraphStore = create((set, get) => ({
@@ -127,6 +238,41 @@ const useGraphStore = create((set, get) => ({
   showEdges:  true,
   toggleShells() { set((s) => ({ showShells: !s.showShells })) },
   toggleEdges()  { set((s) => ({ showEdges:  !s.showEdges  })) },
+
+  // ── layout / style strategy ─────────────────────────────────────────────
+  currentLayout:    localStorage.getItem('kg_layout')    ?? 'sphere',
+  currentNodeStyle: localStorage.getItem('kg_nodestyle') ?? 'polaroid',
+  currentEdgeStyle: localStorage.getItem('kg_edgestyle') ?? 'line',
+
+  setLayout(id) {
+    const layout = getLayout(id)
+    const { nodes, edges } = get()
+    // Recalculate orbitRadius for the target layout before positioning
+    const reRadiused = nodes.map(n => {
+      const gen = n.generation ?? 0
+      const r   = id === 'cone' ? coneRingRadius(gen) : sphereShellRadius(gen)
+      return { ...n, orbitRadius: r }
+    })
+    const posMap = typeof layout.getInitialPositions === 'function'
+      ? layout.getInitialPositions(reRadiused, edges)
+      : new Map(reRadiused.map(n => [n.id, layout.getInitialPosition(n)]))
+    const repositioned = reRadiused.map(n => {
+      const pos = posMap.get(n.id) ?? layout.getInitialPosition(n)
+      return { ...n, ...pos, vx: 0, vy: 0, vz: 0 }
+    })
+    localStorage.setItem('kg_layout', id)
+    set({ currentLayout: id, nodes: repositioned })
+  },
+
+  setNodeStyle(id) {
+    localStorage.setItem('kg_nodestyle', id)
+    set({ currentNodeStyle: id })
+  },
+
+  setEdgeStyle(id) {
+    localStorage.setItem('kg_edgestyle', id)
+    set({ currentEdgeStyle: id })
+  },
 
   // path finding
   pathMode:    false,
@@ -177,11 +323,8 @@ const useGraphStore = create((set, get) => ({
   // graph
   nodes:           [],
   edges:           [],
-  selectedNodeId:  null,
-  pendingConnectId: null,
-  connectMode:     false,
-  pendingRelType:  'PARENT_OF',
-  searchQuery:     '',
+  selectedNodeId: null,
+  searchQuery:    '',
 
   // ── auth actions ──
 
@@ -217,12 +360,39 @@ const useGraphStore = create((set, get) => ({
   async fetchGraph() {
     set({ isLoading: true, error: null })
     try {
-      const { nodes, edges } = await api.getGraph()
-      set({
-        nodes: nodes.map(apiNodeToStore),
-        edges: edges.map(apiEdgeToStore),
-        isLoading: false,
+      const { nodes: rawNodes, edges: rawEdges } = await api.getGraph()
+      const layout     = getLayout(get().currentLayout)
+      const storeEdges = rawEdges.map(apiEdgeToStore)
+      let   storeNodes = rawNodes.map(n => apiNodeToStore(n, layout))
+
+      // ── Step 1: BFS-compute generations from the self node ──────────────
+      // This is the authoritative source — ignores unreliable relationship
+      // strings and correctly places every reachable node on the right ring.
+      const gens = computeGenerations3D(storeNodes, storeEdges)
+
+      // ── Step 2: Apply BFS generations + recalculate orbitRadius ─────────
+      storeNodes = storeNodes.map(n => {
+        const gen = gens.get(n.id) ?? n.generation
+        const r   = layout.id === 'cone' ? coneRingRadius(gen) : shellRadius(n)
+        return { ...n, generation: gen, orbitRadius: r }
       })
+
+      // ── Step 3: Batch positioning with correct generations ───────────────
+      if (typeof layout.getInitialPositions === 'function') {
+        const posMap = layout.getInitialPositions(storeNodes, storeEdges)
+        storeNodes = storeNodes.map(n => {
+          const pos = posMap.get(n.id)
+          return pos ? { ...n, ...pos, vx: 0, vy: 0, vz: 0 } : n
+        })
+      } else {
+        storeNodes = storeNodes.map(n => ({
+          ...n,
+          ...layout.getInitialPosition(n),
+          vx: 0, vy: 0, vz: 0,
+        }))
+      }
+
+      set({ nodes: storeNodes, edges: storeEdges, isLoading: false })
     } catch (err) {
       set({ error: err.message, isLoading: false })
     }
@@ -231,11 +401,13 @@ const useGraphStore = create((set, get) => ({
   async addNode(fullName, orbitRadius = 320) {
     set({ error: null })
     try {
-      const person = await api.createPerson({ full_name: fullName })
-      const pos = randomOnSphere(orbitRadius)
+      const person     = await api.createPerson({ full_name: fullName })
+      const generation = (320 - orbitRadius) / 80  // matches RELATIONSHIP_TO_GENERATION formula
+      const layout     = getLayout(get().currentLayout)
+      const pos        = layout.getInitialPosition({ orbitRadius, generation })
       const node = {
         id: person.id, label: person.full_name,
-        category: 'proxy', orbitRadius,
+        category: 'proxy', orbitRadius, generation,
         x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: 0, vz: 0,
         color: NODE_COLOR.proxy,
         personId: person.id, personCode: person.person_code,
@@ -297,13 +469,8 @@ const useGraphStore = create((set, get) => ({
     }
   },
 
-  selectNode(id)       { set({ selectedNodeId: id }) },
-  setPendingConnect(id){ set({ pendingConnectId: id }) },
-  setPendingRelType(t) { set({ pendingRelType: t }) },
-  setSearchQuery(q)    { set({ searchQuery: q }) },
-  toggleConnectMode()  {
-    set((s) => ({ connectMode: !s.connectMode, pendingConnectId: null }))
-  },
+  selectNode(id)    { set({ selectedNodeId: id }) },
+  setSearchQuery(q) { set({ searchQuery: q }) },
 }))
 
 export default useGraphStore

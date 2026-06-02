@@ -1,39 +1,20 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { OrbitControls, Html, Line } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
 import { useThree, useFrame } from '@react-three/fiber'
-import useGraphStore, { SHELL_RADII } from '../store/useGraphStore'
+import useGraphStore from '../store/useGraphStore'
 import { useSimulation } from '../physics/useSimulation'
 import Node from './Node'
 import Edge from './Edge'
-
-const SHELL_LABELS = [
-  'Great-grandparents',
-  'Grandparents',
-  'Parents',
-  'You',
-  'Children',
-  'Grandchildren',
-]
-
-// 3 great circles (equator + 2 meridians) for a sphere shell of radius r.
-function shellCircles(r) {
-  const pts = (fn) => Array.from({ length: 129 }, (_, i) => fn((i / 128) * Math.PI * 2))
-  return [
-    pts((t) => [r * Math.cos(t), 0,              r * Math.sin(t)]),
-    pts((t) => [r * Math.cos(t), r * Math.sin(t), 0             ]),
-    pts((t) => [0,               r * Math.sin(t), r * Math.cos(t)]),
-  ]
-}
-
+import LayoutGuides from './LayoutGuides'
 
 export default function Graph() {
   const nodes          = useGraphStore((s) => s.nodes)
   const edges          = useGraphStore((s) => s.edges)
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId)
   const fetchGraph     = useGraphStore((s) => s.fetchGraph)
-  const isDark         = useGraphStore((s) => s.isDark)
   const showShells     = useGraphStore((s) => s.showShells)
   const showEdges      = useGraphStore((s) => s.showEdges)
+  const currentLayout  = useGraphStore((s) => s.currentLayout)
 
   const { camera } = useThree()
 
@@ -50,15 +31,28 @@ export default function Graph() {
     if (!selectedNodeId) { flyTarget.current = null; return }
     const node = useGraphStore.getState().nodes.find((n) => n.id === selectedNodeId)
     if (!node) return
-    // Move camera to a point 250 units outward along the node's radial direction
-    const len = Math.sqrt(node.x * node.x + node.y * node.y + node.z * node.z) || 1
-    const dist = node.orbitRadius + 250
-    flyTarget.current = {
-      x: (node.x / len) * dist,
-      y: (node.y / len) * dist,
-      z: (node.z / len) * dist,
+
+    if (currentLayout === 'cone') {
+      // Cone: nodes sit on a horizontal XZ ring at a specific Y height.
+      // Fly the camera to a point outside that ring at the node's Y, looking inward.
+      const xzLen = Math.sqrt(node.x * node.x + node.z * node.z) || 1
+      const viewDist = (node.orbitRadius ?? 360) + 350
+      flyTarget.current = {
+        x: (node.x / xzLen) * viewDist,
+        y: node.y + 80,   // slightly above the ring so the node is visible
+        z: (node.z / xzLen) * viewDist,
+      }
+    } else {
+      // Sphere / others: fly along the 3D radial from centre outward.
+      const len = Math.sqrt(node.x * node.x + node.y * node.y + node.z * node.z) || 1
+      const dist = (node.orbitRadius ?? 320) + 250
+      flyTarget.current = {
+        x: (node.x / len) * dist,
+        y: (node.y / len) * dist,
+        z: (node.z / len) * dist,
+      }
     }
-  }, [selectedNodeId])
+  }, [selectedNodeId, currentLayout])
 
   // lerp camera toward fly-to target each frame
   useFrame(() => {
@@ -89,39 +83,14 @@ export default function Graph() {
       <pointLight position={[0, 0, 0]} intensity={0.8} />
       <pointLight position={[500, 500, 500]} intensity={1.0} />
 
-      {/* Sphere shell guides — 3 great circles per generation shell */}
-      {showShells && SHELL_RADII.map((r, idx) => {
-        const isSelf = idx === 3
-        const color  = isSelf ? '#EA580C' : 'white'
-        const op     = isSelf ? 0.22 : 0.08
-        const lw     = isSelf ? 1.0 : 0.5
-        return (
-          <group key={r}>
-            {shellCircles(r).map((pts, ci) => (
-              <Line key={ci} points={pts} color={color} lineWidth={lw} transparent opacity={op} />
-            ))}
-            <Html position={[r + 16, 0, 0]} center>
-              <span style={{
-                color: isSelf ? '#EA580C' : 'rgba(255,255,255,0.3)',
-                fontSize: 9,
-                whiteSpace: 'nowrap',
-                pointerEvents: 'none',
-                fontFamily: 'system-ui, sans-serif',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}>
-                {SHELL_LABELS[idx]}
-              </span>
-            </Html>
-          </group>
-        )
-      })}
+      {/* Layout visual guides — shells, rings, or lines for the active layout */}
+      {showShells && <LayoutGuides layoutId={currentLayout} />}
 
       {showEdges && edges.map((edge) => {
         const src = nodeMap[edge.sourceId]
         const tgt = nodeMap[edge.targetId]
         if (!src || !tgt) return null
-        return <Edge key={edge.id} sourceNode={src} targetNode={tgt} />
+        return <Edge key={edge.id} edge={edge} sourceNode={src} targetNode={tgt} />
       })}
 
       {nodes.map((node) => (

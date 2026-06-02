@@ -1,18 +1,8 @@
-import { Line } from '@react-three/drei'
+import useGraphStore from '../store/useGraphStore'
+import { getEdgeStyle } from '../edgeStyles'
 
-export default function Edge({ sourceNode, targetNode }) {
-  const points = [
-    [sourceNode.x, sourceNode.y, sourceNode.z],
-    [targetNode.x, targetNode.y, targetNode.z],
-  ]
-
-  return (
-    <Line
-      points={points}
-      color="rgb(150,150,220)"
-      lineWidth={1}
-      transparent
-      opacity={0.4}
-    />
-  )
+export default function Edge({ edge, sourceNode, targetNode }) {
+  const currentEdgeStyle = useGraphStore((s) => s.currentEdgeStyle)
+  const StyleComponent   = getEdgeStyle(currentEdgeStyle)
+  return <StyleComponent edge={edge} sourceNode={sourceNode} targetNode={targetNode} />
 }

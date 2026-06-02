@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(zap grep *)",
+      "Bash(node *)",
+      "Bash(zap read *)",
+      "Bash(zap ls *)",
+      "Bash(zap tree *)",
+      "Bash(mkdir -p \"E:\\\\DIPU\\\\proj\\\\Web\\\\khandelwalfamily\\\\3d\\\\knowledge-graph\\\\src\\\\layouts\")",
+      "Bash(mkdir -p \"E:\\\\DIPU\\\\proj\\\\Web\\\\khandelwalfamily\\\\3d\\\\knowledge-graph\\\\src\\\\nodeStyles\")",
+      "Bash(mkdir -p \"E:\\\\DIPU\\\\proj\\\\Web\\\\khandelwalfamily\\\\3d\\\\knowledge-graph\\\\src\\\\edgeStyles\")",
+      "Bash(zap npm *)"
+    ]
+  }
+}
