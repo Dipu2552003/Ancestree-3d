@@ -1,0 +1,3 @@
+# Cloudflare Pages SPA fallback — serve index.html for any path so client-side
+# routing and the #token=... handoff from Frontend #1 always resolve.
+/*    /index.html    200

@@ -4,15 +4,13 @@ import SearchBar from './components/SearchBar'
 import ControlPanel from './components/ControlPanel'
 import Legend from './components/Legend'
 import PathPanel from './components/PathPanel'
-import LoginScreen from './components/LoginScreen'
 import useGraphStore from './store/useGraphStore'
 import './App.css'
 
 export default function App() {
-  const token  = useGraphStore((s) => s.token)
+  // Auth is handled entirely by the frontend — the token arrives via the URL
+  // hash (see bootstrapAuth.js). There is no login screen in this app.
   const isDark = useGraphStore((s) => s.isDark)
-
-  if (!token) return <LoginScreen />
 
   const bg       = isDark ? '#0b0a09'                 : '#FFF7ED'
   const dotColor = isDark ? 'rgba(255,255,255,0.055)' : 'rgba(160,100,40,0.18)'
