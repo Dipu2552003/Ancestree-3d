@@ -4,7 +4,7 @@ Interactive 3D view of the Ancestree family graph. Launched from the main app an
 
 | Environment | URL |
 |---|---|
-| Production | `https://3d.knownyourancestry.com` |
+| Production | CF Pages URL (custom domain TBD) |
 | Dev (CF preview) | CF Pages preview URL (auto-generated) |
 
 ## Stack
@@ -19,10 +19,10 @@ Interactive 3D view of the Ancestree family graph. Launched from the main app an
 
 ## How auth works
 
-This app has no login screen. The main frontend (`knownyourancestry.com`) passes the JWT as a URL hash on navigation:
+This app has no login screen. The main frontend (`ancestree-frontend.vercel.app`) passes the JWT as a URL hash on navigation:
 
 ```
-https://3d.knownyourancestry.com/#token=<jwt>
+https://<3d-pages-url>/#token=<jwt>
 ```
 
 On boot, the app reads `window.location.hash`, extracts the token, and uses it for all API calls. See `src/bootstrapAuth.js`.
@@ -61,10 +61,8 @@ npm run preview    # preview the built dist/ locally
    - **Build command**: `npm run build`
    - **Build output directory**: `dist`
 4. Settings → Environment variables → **Production** scope:
-   - `VITE_API_URL` → `https://api.knownyourancestry.com/api`
+   - `VITE_API_URL` → `https://ancestree-api.onrender.com/api`
 5. Deploy
-6. Custom domains → add `3d.knownyourancestry.com`
-   - Cloudflare adds the DNS record automatically if your domain is on Cloudflare; otherwise add a CNAME manually
 
 ### Dev (branch: `dev`)
 
@@ -72,7 +70,7 @@ Cloudflare Pages automatically builds the `dev` branch as a **Preview deployment
 
 To add a stable preview env var for the dev branch:
 1. Settings → Environment variables → **Preview** scope:
-   - `VITE_API_URL` → `https://dev.api.knownyourancestry.com/api`
+   - `VITE_API_URL` → `https://ancestree-backend-7ens.onrender.com/api`
 
 > There is no need to set up a separate Pages project — Cloudflare handles both environments from the same project.
 
@@ -94,7 +92,7 @@ This tells Cloudflare Pages to serve `index.html` for any path, so client-side r
 
 | Variable | Local | CF Pages prod | CF Pages dev preview |
 |---|---|---|---|
-| `VITE_API_URL` | `http://localhost:4000/api` | `https://api.knownyourancestry.com/api` | `https://dev.api.knownyourancestry.com/api` |
+| `VITE_API_URL` | `http://localhost:4000/api` | `https://ancestree-api.onrender.com/api` | `https://ancestree-backend-7ens.onrender.com/api` |
 
 `VITE_*` vars are baked into the bundle at build time — a redeploy is required to change them.
 
@@ -104,5 +102,5 @@ This tells Cloudflare Pages to serve `index.html` for any path, so client-side r
 
 | Branch | Deploys to | API |
 |---|---|---|
-| `main` | `3d.knownyourancestry.com` | `api.knownyourancestry.com` |
-| `dev` | CF Pages preview URL | `dev.api.knownyourancestry.com` |
+| `main` | CF Pages URL (prod) | `ancestree-api.onrender.com` |
+| `dev` | CF Pages preview URL | `ancestree-backend-7ens.onrender.com` |
