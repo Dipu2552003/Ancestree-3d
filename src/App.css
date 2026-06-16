@@ -17,3 +17,9 @@ body {
 #canvas-root canvas {
   background: transparent !important;
 }
+
+/* Hide the horizontal scrollbar on the bottom pill navbar (WebKit) while
+   still allowing it to scroll on very narrow screens. */
+.cp-pill::-webkit-scrollbar {
+  display: none;
+}

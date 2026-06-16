@@ -1,6 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
 import useGraphStore from '../store/useGraphStore'
 
+// ── Responsive helper ─────────────────────────────────────────────
+// All styling here is inline, so we detect the viewport width with a
+// tiny resize hook and branch the layout on `isMobile`.
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' && window.innerWidth <= breakpoint
+  )
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= breakpoint)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [breakpoint])
+  return isMobile
+}
+
 // ── Layout / style option definitions ─────────────────────────────────────────
 const LAYOUT_OPTIONS = [
   { id: 'sphere', label: 'Sphere', icon: '◎' },
@@ -123,7 +138,7 @@ function nodeDotColor(node) {
 
 // ── Sub-components ────────────────────────────────────────────────
 
-function NavBtn({ children, onClick, active, label, isDark }) {
+function NavBtn({ children, onClick, active, label, isDark, isMobile }) {
   const [hovered, setHovered] = useState(false)
   const t = getTheme(isDark)
   return (
@@ -131,19 +146,21 @@ function NavBtn({ children, onClick, active, label, isDark }) {
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      title={isMobile ? label : undefined}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        gap: '3px', padding: '8px 10px', borderRadius: '14px',
+        gap: '3px', padding: isMobile ? '8px' : '8px 10px', borderRadius: '14px',
         background: active
           ? (isDark ? 'rgba(234,88,12,0.15)' : 'rgba(234,88,12,0.08)')
           : hovered ? t.itemHoverBg : 'transparent',
         border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-        transition: 'background 0.12s', minWidth: '44px',
+        transition: 'background 0.12s', minWidth: isMobile ? '40px' : '44px',
+        flexShrink: 0,
         color: active ? '#EA580C' : t.textMuted,
       }}
     >
       {children}
-      {label && (
+      {label && !isMobile && (
         <span style={{
           fontSize: '9.5px',
           color: active ? '#EA580C' : t.textMuted,
@@ -197,6 +214,7 @@ export default function ControlPanel() {
   const setNodeStyle      = useGraphStore((s) => s.setNodeStyle)
   const setEdgeStyle      = useGraphStore((s) => s.setEdgeStyle)
 
+  const isMobile     = useIsMobile()
   const t            = getTheme(isDark)
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
 
@@ -243,7 +261,7 @@ export default function ControlPanel() {
       ref={wrapperRef}
       style={{
         position: 'fixed',
-        bottom: '24px',
+        bottom: isMobile ? '14px' : '24px',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 20000000,
@@ -251,6 +269,8 @@ export default function ControlPanel() {
         flexDirection: 'column',
         alignItems: 'center',
         gap: '10px',
+        width: isMobile ? 'calc(100vw - 16px)' : 'auto',
+        maxWidth: 'calc(100vw - 16px)',
         fontFamily: 'system-ui, sans-serif',
       }}
     >
@@ -263,7 +283,7 @@ export default function ControlPanel() {
           borderRadius: '16px',
           padding: '12px 14px',
           boxShadow: t.shadow,
-          width: '240px',
+          width: 'min(240px, calc(100vw - 24px))',
           display: 'flex', flexDirection: 'column', gap: '8px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -327,7 +347,8 @@ export default function ControlPanel() {
           borderRadius: '16px',
           padding: '14px',
           boxShadow: t.shadow,
-          width: '248px',
+          width: 'min(248px, calc(100vw - 24px))',
+          boxSizing: 'border-box',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
             <p style={{
@@ -402,7 +423,8 @@ export default function ControlPanel() {
           borderRadius: '16px',
           padding: '14px',
           boxShadow: t.shadow,
-          width: '272px',
+          width: 'min(272px, calc(100vw - 24px))',
+          boxSizing: 'border-box',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <p style={{
@@ -486,43 +508,56 @@ export default function ControlPanel() {
           border: '1px solid rgba(239,68,68,0.30)',
           borderRadius: '12px', padding: '8px 14px',
           color: '#EF4444', fontSize: '12px', textAlign: 'center',
-          maxWidth: '248px',
+          maxWidth: 'min(248px, calc(100vw - 24px))',
         }}>
           {error}
         </div>
       )}
 
       {/* ── Pill navbar ── */}
-      <div style={{
-        background: t.cardBg,
-        border: `1px solid ${t.borderNeutral}`,
-        borderRadius: '20px',
-        boxShadow: t.shadow,
-        display: 'flex', alignItems: 'center',
-        padding: '6px 8px', gap: '2px',
-      }}>
+      <div
+        className="cp-pill"
+        style={{
+          background: t.cardBg,
+          border: `1px solid ${t.borderNeutral}`,
+          borderRadius: '20px',
+          boxShadow: t.shadow,
+          display: 'flex', alignItems: 'center',
+          padding: isMobile ? '6px' : '6px 8px', gap: '2px',
+          maxWidth: '100%',
+          // On very narrow screens the row can still exceed the viewport even
+          // icon-only, so allow it to scroll horizontally as a safety net.
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+        }}
+      >
 
         {/* Brand */}
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center',
-          gap: '2px', padding: '8px 12px',
+          gap: '2px', padding: isMobile ? '8px' : '8px 12px', flexShrink: 0,
         }}>
           <span style={{ fontSize: '16px', lineHeight: 1 }}>🌸</span>
-          <span style={{
-            fontSize: '9.5px', fontWeight: 600, color: t.text,
-            letterSpacing: '0.04em', whiteSpace: 'nowrap',
-          }}>
-            Khandelwal
-          </span>
+          {!isMobile && (
+            <span style={{
+              fontSize: '9.5px', fontWeight: 600, color: t.text,
+              letterSpacing: '0.04em', whiteSpace: 'nowrap',
+            }}>
+              Khandelwal
+            </span>
+          )}
         </div>
 
         <NavDivider isDark={isDark} />
 
         {/* + Add button */}
-        <div style={{ padding: '0 2px' }}>
+        <div style={{ padding: '0 2px', flexShrink: 0 }}>
           <AddBtn
             open={addOpen}
             isDark={isDark}
+            isMobile={isMobile}
             onClick={() => { setAddOpen((v) => !v); setViewOpen(false) }}
           />
         </div>
@@ -530,6 +565,7 @@ export default function ControlPanel() {
         {/* Path Finder */}
         <NavBtn
           isDark={isDark}
+          isMobile={isMobile}
           active={pathMode}
           label="Path"
           onClick={() => { setAddOpen(false); setViewOpen(false); togglePathMode() }}
@@ -540,6 +576,7 @@ export default function ControlPanel() {
         {/* View settings */}
         <NavBtn
           isDark={isDark}
+          isMobile={isMobile}
           active={viewOpen}
           label="View"
           onClick={() => { setAddOpen(false); setViewOpen((v) => !v) }}
@@ -550,24 +587,24 @@ export default function ControlPanel() {
         <NavDivider isDark={isDark} />
 
         {/* Shells toggle */}
-        <NavBtn isDark={isDark} active={showShells} label="Shells" onClick={toggleShells}>
+        <NavBtn isDark={isDark} isMobile={isMobile} active={showShells} label="Shells" onClick={toggleShells}>
           <ShellsIcon />
         </NavBtn>
 
         {/* Edges toggle */}
-        <NavBtn isDark={isDark} active={showEdges} label="Edges" onClick={toggleEdges}>
+        <NavBtn isDark={isDark} isMobile={isMobile} active={showEdges} label="Edges" onClick={toggleEdges}>
           <EdgesIcon />
         </NavBtn>
 
         <NavDivider isDark={isDark} />
 
         {/* Theme */}
-        <NavBtn isDark={isDark} active={false} label={isDark ? 'Light' : 'Dark'} onClick={toggleTheme}>
+        <NavBtn isDark={isDark} isMobile={isMobile} active={false} label={isDark ? 'Light' : 'Dark'} onClick={toggleTheme}>
           {isDark ? <SunIcon /> : <MoonIcon />}
         </NavBtn>
 
         {/* Logout */}
-        <NavBtn isDark={isDark} active={false} label="Logout" onClick={logout}>
+        <NavBtn isDark={isDark} isMobile={isMobile} active={false} label="Logout" onClick={logout}>
           <LogoutIcon />
         </NavBtn>
       </div>
@@ -576,7 +613,7 @@ export default function ControlPanel() {
 }
 
 // Separate component so hover state is isolated
-function AddBtn({ open, isDark, onClick }) {
+function AddBtn({ open, isDark, isMobile, onClick }) {
   const [hovered, setHovered] = useState(false)
   const t = getTheme(isDark)
   const active = open
@@ -587,7 +624,7 @@ function AddBtn({ open, isDark, onClick }) {
       onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: '5px',
-        padding: '8px 14px', borderRadius: '14px',
+        padding: isMobile ? '8px 12px' : '8px 14px', borderRadius: '14px',
         background: active
           ? (isDark ? 'rgba(234,88,12,0.15)' : 'rgba(234,88,12,0.08)')
           : hovered
