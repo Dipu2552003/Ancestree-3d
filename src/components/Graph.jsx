@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { OrbitControls } from '@react-three/drei'
 import { useThree, useFrame } from '@react-three/fiber'
+import * as THREE from 'three'
 import useGraphStore from '../store/useGraphStore'
 import { useSimulation } from '../physics/useSimulation'
 import Node from './Node'
@@ -78,7 +79,12 @@ export default function Graph() {
 
   return (
     <>
-      <OrbitControls enableDamping dampingFactor={0.08} target={[0, 0, 0]} />
+      <OrbitControls
+        enableDamping
+        dampingFactor={0.08}
+        target={[0, 0, 0]}
+        mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null }}
+      />
       <ambientLight intensity={0.3} />
       <pointLight position={[0, 0, 0]} intensity={0.8} />
       <pointLight position={[500, 500, 500]} intensity={1.0} />
