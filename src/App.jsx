@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
 import Graph from './components/Graph'
 import SearchBar from './components/SearchBar'
@@ -14,6 +15,16 @@ export default function App() {
   const isLoading = useGraphStore((s) => s.isLoading)
   const error     = useGraphStore((s) => s.error)
   const fetchGraph = useGraphStore((s) => s.fetchGraph)
+
+  // OrbitControls always adds a contextmenu listener that calls preventDefault(),
+  // blocking the browser's right-click menu regardless of mouseButtons config.
+  // Intercept in capture phase (fires before OrbitControls' bubble handler)
+  // so preventDefault() is never called and the native menu appears normally.
+  useEffect(() => {
+    const stop = (e) => { if (e.target.tagName === 'CANVAS') e.stopImmediatePropagation() }
+    document.addEventListener('contextmenu', stop, { capture: true })
+    return () => document.removeEventListener('contextmenu', stop, { capture: true })
+  }, [])
 
   const bg       = isDark ? '#0b0a09'                 : '#FFF7ED'
   const dotColor = isDark ? 'rgba(255,255,255,0.055)' : 'rgba(160,100,40,0.18)'
