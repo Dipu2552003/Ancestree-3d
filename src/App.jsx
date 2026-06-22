@@ -5,6 +5,7 @@ import SearchBar from './components/SearchBar'
 import ControlPanel from './components/ControlPanel'
 import Legend from './components/Legend'
 import PathPanel from './components/PathPanel'
+import ErrorModal from './components/ErrorModal'
 import useGraphStore from './store/useGraphStore'
 import './App.css'
 
@@ -13,8 +14,6 @@ export default function App() {
   // hash (see bootstrapAuth.js). There is no login screen in this app.
   const isDark    = useGraphStore((s) => s.isDark)
   const isLoading = useGraphStore((s) => s.isLoading)
-  const error     = useGraphStore((s) => s.error)
-  const fetchGraph = useGraphStore((s) => s.fetchGraph)
 
   // OrbitControls always adds a contextmenu listener that calls preventDefault(),
   // blocking the browser's right-click menu regardless of mouseButtons config.
@@ -74,58 +73,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Error banner */}
-      {!isLoading && error && (
-        <div style={{
-          position: 'fixed', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 999,
-          pointerEvents: 'none',
-        }}>
-          <div style={{
-            pointerEvents: 'all',
-            background: isDark ? '#1c1917' : '#fff',
-            border: '1.5px solid #EA580C',
-            borderRadius: 12,
-            padding: '28px 32px',
-            maxWidth: 420,
-            width: '90%',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-            display: 'flex', flexDirection: 'column', gap: 12,
-            fontFamily: 'Inter, sans-serif',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 22 }}>⚠️</span>
-              <span style={{ fontWeight: 700, fontSize: 16, color: isDark ? '#f5f5f4' : '#1c1917' }}>
-                Could not load family graph
-              </span>
-            </div>
-            <p style={{ fontSize: 13, color: isDark ? '#a8a29e' : '#57534e', lineHeight: 1.6, margin: 0 }}>
-              {error}
-            </p>
-            <p style={{ fontSize: 12, color: isDark ? '#78716c' : '#a8a29e', margin: 0 }}>
-              Make sure the backend is running at <code style={{ background: isDark ? '#292524' : '#fef3c7', padding: '1px 5px', borderRadius: 4 }}>{import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'}</code>
-            </p>
-            <button
-              onClick={fetchGraph}
-              style={{
-                marginTop: 4,
-                padding: '8px 20px',
-                background: '#EA580C',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 7,
-                fontWeight: 600,
-                fontSize: 14,
-                cursor: 'pointer',
-                alignSelf: 'flex-start',
-              }}
-            >
-              Retry
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Error modal — surfaces any store error (load, add, remove, search …) */}
+      <ErrorModal />
     </div>
   )
 }

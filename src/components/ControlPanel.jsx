@@ -76,12 +76,6 @@ const SunIcon = () => (
     <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
   </svg>
 )
-const LogoutIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-    <polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
-  </svg>
-)
 const XIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -197,8 +191,6 @@ export default function ControlPanel() {
   const removeNode        = useGraphStore((s) => s.removeNode)
   const selectedNodeId    = useGraphStore((s) => s.selectedNodeId)
   const selectNode        = useGraphStore((s) => s.selectNode)
-  const logout            = useGraphStore((s) => s.logout)
-  const error             = useGraphStore((s) => s.error)
   const isDark            = useGraphStore((s) => s.isDark)
   const toggleTheme       = useGraphStore((s) => s.toggleTheme)
   const showShells        = useGraphStore((s) => s.showShells)
@@ -501,18 +493,7 @@ export default function ControlPanel() {
         </div>
       )}
 
-      {/* ── Error toast ── */}
-      {error && (
-        <div style={{
-          background: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.08)',
-          border: '1px solid rgba(239,68,68,0.30)',
-          borderRadius: '12px', padding: '8px 14px',
-          color: '#EF4444', fontSize: '12px', textAlign: 'center',
-          maxWidth: 'min(248px, calc(100vw - 24px))',
-        }}>
-          {error}
-        </div>
-      )}
+      {/* Errors are shown centrally via <ErrorModal /> (see App.jsx). */}
 
       {/* ── Pill navbar ── */}
       <div
@@ -601,11 +582,6 @@ export default function ControlPanel() {
         {/* Theme */}
         <NavBtn isDark={isDark} isMobile={isMobile} active={false} label={isDark ? 'Light' : 'Dark'} onClick={toggleTheme}>
           {isDark ? <SunIcon /> : <MoonIcon />}
-        </NavBtn>
-
-        {/* Logout */}
-        <NavBtn isDark={isDark} isMobile={isMobile} active={false} label="Logout" onClick={logout}>
-          <LogoutIcon />
         </NavBtn>
       </div>
     </div>

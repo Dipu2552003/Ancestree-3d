@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { api } from '../lib/api'
+import { redirectToLogin } from '../lib/auth'
 import { getLayout } from '../layouts'
 import SphereLayout, { getSphereOrbitRadius, sphereShellRadius } from '../layouts/SphereLayout'
 
@@ -221,7 +222,9 @@ const useGraphStore = create((set, get) => ({
   token:     localStorage.getItem('kg_token') ?? null,
   user:      null,
   isLoading: false,
-  error:     null,
+  error:     null,   // human-readable message string, or null
+
+  clearError() { set({ error: null }) },
 
   // theme
   isDark: localStorage.getItem('kg_theme') === 'dark',
@@ -288,7 +291,7 @@ const useGraphStore = create((set, get) => ({
   },
 
   setPathNode(id) {
-    const { pathSource, nodes, edges } = get()
+    const { pathSource, edges } = get()
     if (!pathSource) {
       set({ pathSource: id, pathTarget: null, pathResults: [] })
       return
@@ -358,6 +361,9 @@ const useGraphStore = create((set, get) => ({
   // ── graph actions ──
 
   async fetchGraph() {
+    // No session handed over (direct visit) — bounce to the frontend login
+    // rather than firing a request that's guaranteed to 401.
+    if (!get().token) { redirectToLogin(); return }
     set({ isLoading: true, error: null })
     try {
       const { nodes: rawNodes, edges: rawEdges } = await api.getGraph()
@@ -394,6 +400,9 @@ const useGraphStore = create((set, get) => ({
 
       set({ nodes: storeNodes, edges: storeEdges, isLoading: false })
     } catch (err) {
+      // Expired or invalid token → send the user back to login for a fresh
+      // handoff instead of showing a dead-end error banner.
+      if (err.status === 401) { redirectToLogin(); return }
       set({ error: err.message, isLoading: false })
     }
   },
