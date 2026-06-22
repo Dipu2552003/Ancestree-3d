@@ -20,9 +20,6 @@ function useIsMobile(breakpoint = 640) {
 const LAYOUT_OPTIONS = [
   { id: 'sphere', label: 'Sphere', icon: '◎' },
   { id: 'cone',   label: 'Cone',   icon: '△' },
-  { id: 'tree',   label: 'Tree',   icon: '⋮' },
-  { id: 'helix',  label: 'Helix',  icon: '∿' },
-  { id: 'force',  label: 'Force',  icon: '✦' },
 ]
 
 const NODE_STYLE_OPTIONS = [

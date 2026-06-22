@@ -11,8 +11,6 @@ import {
   SHELL_LABELS,
 } from '../layouts/SphereLayout'
 import { GEN_Y_GAP, CONE_RADIUS_PER_GEN, MAX_GEN } from '../layouts/ConeLayout'
-import { TREE_Y }                  from '../layouts/TreeLayout'
-import { HELIX_RADIUS, HELIX_PITCH, HELIX_GENS } from '../layouts/HelixLayout'
 
 // Generation levels shown in the cone layout
 const CONE_GENS = [3, 2, 1, 0, -1, -2]
@@ -114,105 +112,11 @@ function ConeGuides() {
   )
 }
 
-// ── TreeGuides ────────────────────────────────────────────────────────────────
-function TreeGuides() {
-  const entries = Object.entries(TREE_Y)
-  return (
-    <>
-      {entries.map(([orbitR, yPos]) => {
-        const isSelf = Number(orbitR) === 320
-        const color  = isSelf ? '#EA580C' : 'white'
-        const op     = isSelf ? 0.22 : 0.08
-        const lw     = isSelf ? 1.0 : 0.5
-        const label  = SHELL_LABELS[SHELL_RADII.indexOf(Number(orbitR))] ?? ''
-
-        return (
-          <group key={orbitR}>
-            <Line
-              points={[[-420, yPos, 0], [420, yPos, 0]]}
-              color={color} lineWidth={lw} transparent opacity={op}
-            />
-            <Html position={[436, yPos, 0]} center>
-              <span style={{
-                color: isSelf ? '#EA580C' : 'rgba(255,255,255,0.3)',
-                fontSize: 9,
-                whiteSpace: 'nowrap',
-                pointerEvents: 'none',
-                fontFamily: 'system-ui, sans-serif',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}>
-                {label}
-              </span>
-            </Html>
-          </group>
-        )
-      })}
-    </>
-  )
-}
-
-// ── HelixGuides ───────────────────────────────────────────────────────────────
-function HelixGuides() {
-  const entries = Object.entries(HELIX_GENS)
-  return (
-    <>
-      {entries.map(([orbitR, gen]) => {
-        const yPos   = gen * HELIX_PITCH
-        const isSelf = gen === 0
-        const color  = isSelf ? '#EA580C' : 'white'
-        const op     = isSelf ? 0.22 : 0.08
-        const lw     = isSelf ? 1.0 : 0.5
-        const label  = SHELL_LABELS[SHELL_RADII.indexOf(Number(orbitR))] ?? ''
-
-        return (
-          <group key={orbitR}>
-            <Line
-              points={circlePointsXZ(HELIX_RADIUS, yPos)}
-              color={color} lineWidth={lw} transparent opacity={op}
-            />
-            <Html position={[HELIX_RADIUS + 16, yPos, 0]} center>
-              <span style={{
-                color: isSelf ? '#EA580C' : 'rgba(255,255,255,0.3)',
-                fontSize: 9,
-                whiteSpace: 'nowrap',
-                pointerEvents: 'none',
-                fontFamily: 'system-ui, sans-serif',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}>
-                {label}
-              </span>
-            </Html>
-          </group>
-        )
-      })}
-    </>
-  )
-}
-
-// ── ForceGuides ───────────────────────────────────────────────────────────────
-function ForceGuides() {
-  // Single equatorial circle at r=550, very faint soft boundary indicator
-  return (
-    <Line
-      points={circlePointsXZ(550, 0)}
-      color="white"
-      lineWidth={0.5}
-      transparent
-      opacity={0.04}
-    />
-  )
-}
-
 // ── LayoutGuides (main export) ────────────────────────────────────────────────
 export default function LayoutGuides({ layoutId }) {
   switch (layoutId) {
-    case 'sphere': return <SphereGuides />
     case 'cone':   return <ConeGuides />
-    case 'tree':   return <TreeGuides />
-    case 'helix':  return <HelixGuides />
-    case 'force':  return <ForceGuides />
+    case 'sphere':
     default:       return <SphereGuides />
   }
 }

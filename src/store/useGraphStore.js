@@ -243,7 +243,11 @@ const useGraphStore = create((set, get) => ({
   toggleEdges()  { set((s) => ({ showEdges:  !s.showEdges  })) },
 
   // ── layout / style strategy ─────────────────────────────────────────────
-  currentLayout:    localStorage.getItem('kg_layout')    ?? 'sphere',
+  // Only 'sphere' and 'cone' are supported; a stale stored value (e.g. a
+  // removed 'force'/'tree'/'helix') falls back to sphere.
+  currentLayout:    ['sphere', 'cone'].includes(localStorage.getItem('kg_layout'))
+    ? localStorage.getItem('kg_layout')
+    : 'sphere',
   currentNodeStyle: localStorage.getItem('kg_nodestyle') ?? 'polaroid',
   currentEdgeStyle: localStorage.getItem('kg_edgestyle') ?? 'line',
 
