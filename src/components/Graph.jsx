@@ -77,6 +77,19 @@ export default function Graph() {
     return m
   }, [nodes])
 
+  // Cone guide rings are derived from the actual nodes so the drawn circles
+  // always match the population-sized rings the nodes sit on. One entry per
+  // generation: its Y height and (shared) ring radius.
+  const coneRings = useMemo(() => {
+    if (currentLayout !== 'cone') return []
+    const byGen = new Map()
+    nodes.forEach((n) => {
+      const g = n.generation ?? 0
+      if (!byGen.has(g)) byGen.set(g, { gen: g, y: n.y, r: n.orbitRadius ?? 90 })
+    })
+    return [...byGen.values()]
+  }, [currentLayout, nodes])
+
   return (
     <>
       <OrbitControls
@@ -90,7 +103,7 @@ export default function Graph() {
       <pointLight position={[500, 500, 500]} intensity={1.0} />
 
       {/* Layout visual guides — shells, rings, or lines for the active layout */}
-      {showShells && <LayoutGuides layoutId={currentLayout} />}
+      {showShells && <LayoutGuides layoutId={currentLayout} coneRings={coneRings} />}
 
       {showEdges && edges.map((edge) => {
         const src = nodeMap[edge.sourceId]

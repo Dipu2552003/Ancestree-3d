@@ -10,13 +10,11 @@ import {
   SHELL_RADII,
   SHELL_LABELS,
 } from '../layouts/SphereLayout'
-import { GEN_Y_GAP, CONE_RADIUS_PER_GEN, MAX_GEN } from '../layouts/ConeLayout'
 
-// Generation levels shown in the cone layout
-const CONE_GENS = [3, 2, 1, 0, -1, -2]
+// Labels for the cone generation rings, keyed by generation number.
 const CONE_GEN_LABELS = {
   3: 'Great-grandparents', 2: 'Grandparents', 1: 'Parents',
-  0: 'You', '-1': 'Children', '-2': 'Grandchildren',
+  0: 'You', '-1': 'Children', '-2': 'Grandchildren', '-3': 'Great-grandchildren',
 }
 
 // ── Helper: build a flat horizontal circle (XZ plane) at given y and radius ──
@@ -72,14 +70,12 @@ function SphereGuides() {
 }
 
 // ── ConeGuides ────────────────────────────────────────────────────────────────
-// Rings mirror the actual cone shape: small at top (oldest ancestors),
-// progressively wider going down to descendants.
-function ConeGuides() {
+// Rings are passed in from Graph.jsx, derived from the actual nodes, so each
+// guide circle matches the population-sized ring its generation sits on.
+function ConeGuides({ rings = [] }) {
   return (
     <>
-      {CONE_GENS.map((gen) => {
-        const y      = gen * GEN_Y_GAP
-        const r      = Math.max(CONE_RADIUS_PER_GEN, (MAX_GEN + 1 - gen) * CONE_RADIUS_PER_GEN)
+      {rings.map(({ gen, y, r }) => {
         const isSelf = gen === 0
         const label  = CONE_GEN_LABELS[gen] ?? ''
 
@@ -113,9 +109,9 @@ function ConeGuides() {
 }
 
 // ── LayoutGuides (main export) ────────────────────────────────────────────────
-export default function LayoutGuides({ layoutId }) {
+export default function LayoutGuides({ layoutId, coneRings = [] }) {
   switch (layoutId) {
-    case 'cone':   return <ConeGuides />
+    case 'cone':   return <ConeGuides rings={coneRings} />
     case 'sphere':
     default:       return <SphereGuides />
   }

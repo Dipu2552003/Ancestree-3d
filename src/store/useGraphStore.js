@@ -3,6 +3,7 @@ import { api } from '../lib/api'
 import { redirectToLogin } from '../lib/auth'
 import { getLayout } from '../layouts'
 import SphereLayout, { getSphereOrbitRadius, sphereShellRadius } from '../layouts/SphereLayout'
+import { coneRingRadiusForCount } from '../layouts/ConeLayout'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -102,6 +103,17 @@ const CONE_MAX_GEN = 3
 const CONE_RADIUS_STEP = 90
 function coneRingRadius(gen) {
   return Math.max(CONE_RADIUS_STEP, (CONE_MAX_GEN + 1 - gen) * CONE_RADIUS_STEP)
+}
+
+// Build a gen → ring-radius lookup for the cone layout that sizes each ring by
+// how many nodes share that generation (see ConeLayout.coneRingRadiusForCount).
+function coneRadiusByGen(nodes) {
+  const counts = new Map()
+  for (const n of nodes) {
+    const g = n.generation ?? 0
+    counts.set(g, (counts.get(g) ?? 0) + 1)
+  }
+  return (gen) => coneRingRadiusForCount(counts.get(gen) ?? 1)
 }
 
 function apiNodeToStore(apiNode, layout = SphereLayout) {
@@ -254,10 +266,12 @@ const useGraphStore = create((set, get) => ({
   setLayout(id) {
     const layout = getLayout(id)
     const { nodes, edges } = get()
-    // Recalculate orbitRadius for the target layout before positioning
+    // Recalculate orbitRadius for the target layout before positioning.
+    // Cone rings are sized by their population; sphere shells by generation.
+    const coneRadius = id === 'cone' ? coneRadiusByGen(nodes) : null
     const reRadiused = nodes.map(n => {
       const gen = n.generation ?? 0
-      const r   = id === 'cone' ? coneRingRadius(gen) : sphereShellRadius(gen)
+      const r   = id === 'cone' ? coneRadius(gen) : sphereShellRadius(gen)
       return { ...n, orbitRadius: r }
     })
     const posMap = typeof layout.getInitialPositions === 'function'
@@ -381,9 +395,21 @@ const useGraphStore = create((set, get) => ({
       const gens = computeGenerations3D(storeNodes, storeEdges)
 
       // ── Step 2: Apply BFS generations + recalculate orbitRadius ─────────
+      // For the cone, size each generation's ring by how many people land on it
+      // (population-aware) so rings stay readable for any family size.
+      let coneCounts = null
+      if (layout.id === 'cone') {
+        coneCounts = new Map()
+        for (const n of storeNodes) {
+          const g = gens.get(n.id) ?? n.generation
+          coneCounts.set(g, (coneCounts.get(g) ?? 0) + 1)
+        }
+      }
       storeNodes = storeNodes.map(n => {
         const gen = gens.get(n.id) ?? n.generation
-        const r   = layout.id === 'cone' ? coneRingRadius(gen) : shellRadius(n)
+        const r   = layout.id === 'cone'
+          ? coneRingRadiusForCount(coneCounts.get(gen) ?? 1)
+          : shellRadius(n)
         return { ...n, generation: gen, orbitRadius: r }
       })
 
@@ -411,6 +437,21 @@ const useGraphStore = create((set, get) => ({
     }
   },
 
+  // Re-size a cone generation's ring to fit its current population. Updates
+  // orbitRadius on every node in that generation; the physics constraint then
+  // smoothly eases them out/in to the new radius (no position jump).
+  resizeConeRing(generation) {
+    if (get().currentLayout !== 'cone') return
+    const count = get().nodes.reduce(
+      (acc, n) => acc + ((n.generation ?? 0) === generation ? 1 : 0), 0,
+    )
+    if (count === 0) return
+    const r = coneRingRadiusForCount(count)
+    set((s) => ({
+      nodes: s.nodes.map(n => (n.generation ?? 0) === generation ? { ...n, orbitRadius: r } : n),
+    }))
+  },
+
   async addNode(fullName, orbitRadius = 320) {
     set({ error: null })
     try {
@@ -432,6 +473,8 @@ const useGraphStore = create((set, get) => ({
         gender: null, nickname: null, occupation: null,
       }
       set((s) => ({ nodes: [...s.nodes, node] }))
+      // Grow this generation's cone ring to accommodate the new person.
+      get().resizeConeRing(generation)
     } catch (err) {
       set({ error: err.message })
     }
@@ -439,7 +482,8 @@ const useGraphStore = create((set, get) => ({
 
   async removeNode(id) {
     set({ error: null })
-    const { edges } = get()
+    const { edges, nodes } = get()
+    const generation = nodes.find((n) => n.id === id)?.generation ?? 0
     const connected = edges.filter((e) => e.sourceId === id || e.targetId === id)
     try {
       await Promise.all(connected.map((e) => api.deleteRelationship(e.id)))
@@ -449,6 +493,8 @@ const useGraphStore = create((set, get) => ({
         edges: s.edges.filter((e) => e.sourceId !== id && e.targetId !== id),
         selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
       }))
+      // Shrink this generation's cone ring now that someone left it.
+      get().resizeConeRing(generation)
     } catch (err) {
       set({ error: err.message })
     }

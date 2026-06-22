@@ -20,8 +20,27 @@
 // Y and radius are hard-snapped after every tick.
 
 export const GEN_Y_GAP           = 140   // world units between generations
-export const CONE_RADIUS_PER_GEN = 90    // ring radius step per generation
+export const CONE_RADIUS_PER_GEN = 90    // ring radius step per generation (legacy fallback)
 export const MAX_GEN             = 3     // highest generation displayed (great-grandparents)
+
+// ── Population-aware ring sizing ────────────────────────────────────────────
+// The ring radius is driven by how many people sit on it, not by the
+// generation number. We size each ring so neighbouring people keep a roughly
+// constant arc-length gap (RING_NODE_ARC) along the circumference:
+//
+//   circumference = count × RING_NODE_ARC   →   radius = count × ARC / (2π)
+//
+// Sparse rings clamp to RING_MIN_RADIUS so a lone person isn't jammed at the
+// centre; crowded rings grow as wide as they need to. Because higher (ancestor)
+// generations usually hold fewer people and lower (descendant) generations more,
+// this naturally yields a cone that bulges where the family is largest.
+export const RING_NODE_ARC   = 100   // desired arc-length spacing between adjacent people
+export const RING_MIN_RADIUS = 90    // smallest ring radius (1–2 people)
+
+export function coneRingRadiusForCount(count) {
+  if (count <= 1) return RING_MIN_RADIUS
+  return Math.max(RING_MIN_RADIUS, (count * RING_NODE_ARC) / (2 * Math.PI))
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -76,11 +95,13 @@ const ConeLayout = {
   label: 'Cone',
   icon: '△',
 
-  // Per-node placement (used for single addNode calls).
+  // Per-node placement (used for single addNode calls). Honours a radius the
+  // caller already computed for the node's ring (node.orbitRadius); falls back
+  // to the legacy per-generation radius when none is supplied.
   getInitialPosition(node) {
     const gen   = nodeGeneration(node)
     const y     = coneY(gen)
-    const r     = coneR(gen)
+    const r     = node.orbitRadius ?? coneR(gen)
     const angle = Math.random() * Math.PI * 2
     return { x: r * Math.cos(angle), y, z: r * Math.sin(angle) }
   },
@@ -116,7 +137,8 @@ const ConeLayout = {
     for (const gen of gensSorted) {
       const genNodes = byGen.get(gen)
       const y = coneY(gen)
-      const r = coneR(gen)
+      // Ring radius scales with this generation's population.
+      const r = coneRingRadiusForCount(genNodes.length)
 
       // Compute each node's "parent angle" — circular mean of its parents' XZ angles.
       // Nodes whose parents are not yet placed (or have no parents) get null.
@@ -154,7 +176,9 @@ const ConeLayout = {
 
       sorted.forEach((node, i) => {
         const angle = startAngle + (2 * Math.PI * i) / count
-        positions.set(node.id, { x: r * Math.cos(angle), y, z: r * Math.sin(angle) })
+        // Carry orbitRadius so it becomes the node's ring of record (the store
+        // spreads this onto the node, and constrain() snaps to it every tick).
+        positions.set(node.id, { x: r * Math.cos(angle), y, z: r * Math.sin(angle), orbitRadius: r })
       })
     }
 
@@ -162,10 +186,12 @@ const ConeLayout = {
   },
 
   // After physics forces, snap Y and radius — only angle is free to change.
+  // The ring radius is the population-aware value stored on the node; fall back
+  // to the legacy per-generation radius if it hasn't been computed yet.
   constrain(x, y, z, vx, vy, vz, node) {
     const gen     = nodeGeneration(node)
     const targetY = coneY(gen)
-    const r       = coneR(gen)
+    const r       = node.orbitRadius ?? coneR(gen)
 
     const xzDist = Math.sqrt(x * x + z * z) || 1
     const scale  = r / xzDist
