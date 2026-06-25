@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { OrbitControls } from '@react-three/drei'
+import { OrbitControls, Line } from '@react-three/drei'
 import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import useGraphStore from '../store/useGraphStore'
@@ -78,11 +78,14 @@ export default function Graph() {
     return m
   }, [nodes])
 
-  // Among all found paths, pick the shortest connection (fewest hops) and
-  // collect its consecutive node pairs as undirected edge keys. Edges in this
-  // set get highlighted; every other edge is dulled while paths are shown.
-  const shortestPathEdges = useMemo(() => {
-    if (!pathResults || pathResults.length === 0) return null
+  // Among all found paths, pick the shortest connection (fewest hops). We keep
+  // both the ordered node list (drawn as a bright overlay line) and a set of its
+  // undirected edge keys (so any matching real edge is highlighted too). Every
+  // other edge is dulled while paths are shown.
+  const { shortestPath, shortestPathEdges } = useMemo(() => {
+    if (!pathResults || pathResults.length === 0) {
+      return { shortestPath: null, shortestPathEdges: null }
+    }
     let best = null
     for (const p of pathResults) {
       if (!best || p.length < best.length) best = p
@@ -92,8 +95,20 @@ export default function Graph() {
       set.add(`${best[i - 1]}|${best[i]}`)
       set.add(`${best[i]}|${best[i - 1]}`)
     }
-    return set
+    return { shortestPath: best, shortestPathEdges: set }
   }, [pathResults])
+
+  // Build the overlay polyline points from current node positions. The shortest
+  // path can hop through sibling links (which aren't drawn as edges), so this
+  // overlay guarantees the highlighted connection is always visible.
+  const shortestPathPoints = useMemo(() => {
+    if (!shortestPath || shortestPath.length < 2) return null
+    const pts = shortestPath
+      .map((id) => nodeMap[id])
+      .filter(Boolean)
+      .map((n) => [n.x, n.y, n.z])
+    return pts.length >= 2 ? pts : null
+  }, [shortestPath, nodeMap])
 
   // Cone guide rings are derived from the actual nodes so the drawn circles
   // always match the population-sized rings the nodes sit on. One entry per
@@ -139,6 +154,15 @@ export default function Graph() {
         }
         return <Edge key={edge.id} edge={edge} sourceNode={src} targetNode={tgt} pathState={pathState} />
       })}
+
+      {/* Shortest-connection overlay — bright green polyline drawn on top of
+          everything, regardless of which underlying edges exist. */}
+      {showEdges && shortestPathPoints && (
+        <>
+          <Line points={shortestPathPoints} color="#16A34A" lineWidth={6} transparent opacity={0.35} depthTest={false} renderOrder={998} />
+          <Line points={shortestPathPoints} color="#4ADE80" lineWidth={2.5} transparent opacity={1} depthTest={false} renderOrder={999} />
+        </>
+      )}
 
       {nodes.map((node) => (
         <Node key={node.id} node={node} />
