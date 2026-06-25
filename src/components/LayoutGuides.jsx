@@ -6,13 +6,9 @@
 // It receives layoutId as a prop from Graph.jsx.
 
 import { Line, Html } from '@react-three/drei'
-import {
-  SHELL_RADII,
-  SHELL_LABELS,
-} from '../layouts/SphereLayout'
 
-// Labels for the cone generation rings, keyed by generation number.
-const CONE_GEN_LABELS = {
+// Labels for the generation rings/shells, keyed by generation number.
+const GEN_LABELS = {
   3: 'Great-grandparents', 2: 'Grandparents', 1: 'Parents',
   0: 'You', '-1': 'Children', '-2': 'Grandchildren', '-3': 'Great-grandchildren',
 }
@@ -36,16 +32,19 @@ function shellCircles(r) {
 }
 
 // ── SphereGuides ───────────────────────────────────────────────────────────────
-function SphereGuides() {
+// Shells are passed in from Graph.jsx, derived from the actual nodes, so each
+// drawn shell matches the population-sized radius its generation sits on.
+function SphereGuides({ shells = [] }) {
   return (
     <>
-      {SHELL_RADII.map((r, idx) => {
-        const isSelf = idx === 3
+      {shells.map(({ gen, r }) => {
+        const isSelf = gen === 0
         const color  = isSelf ? '#EA580C' : 'white'
         const op     = isSelf ? 0.22 : 0.08
         const lw     = isSelf ? 1.0 : 0.5
+        const label  = GEN_LABELS[gen] ?? ''
         return (
-          <group key={r}>
+          <group key={gen}>
             {shellCircles(r).map((pts, ci) => (
               <Line key={ci} points={pts} color={color} lineWidth={lw} transparent opacity={op} />
             ))}
@@ -59,7 +58,7 @@ function SphereGuides() {
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
               }}>
-                {SHELL_LABELS[idx]}
+                {label}
               </span>
             </Html>
           </group>
@@ -77,7 +76,7 @@ function ConeGuides({ rings = [] }) {
     <>
       {rings.map(({ gen, y, r }) => {
         const isSelf = gen === 0
-        const label  = CONE_GEN_LABELS[gen] ?? ''
+        const label  = GEN_LABELS[gen] ?? ''
 
         return (
           <group key={gen}>
@@ -109,10 +108,10 @@ function ConeGuides({ rings = [] }) {
 }
 
 // ── LayoutGuides (main export) ────────────────────────────────────────────────
-export default function LayoutGuides({ layoutId, coneRings = [] }) {
+export default function LayoutGuides({ layoutId, coneRings = [], sphereShells = [] }) {
   switch (layoutId) {
     case 'cone':   return <ConeGuides rings={coneRings} />
     case 'sphere':
-    default:       return <SphereGuides />
+    default:       return <SphereGuides shells={sphereShells} />
   }
 }

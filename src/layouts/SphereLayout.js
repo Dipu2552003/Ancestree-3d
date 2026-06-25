@@ -6,11 +6,47 @@
 export const SPHERE_SELF_RADIUS = 550   // radius of generation-0 (self) shell
 export const SPHERE_STEP        = 150   // gap between adjacent shells
 
-// generation → shell radius
+// generation → shell radius (legacy fixed sizing; used as a fallback)
 // Ancestors (positive gen in 3D convention) → inner shells (smaller r)
 // Descendants (negative gen)               → outer shells (larger r)
 export function sphereShellRadius(gen) {
   return Math.max(80, SPHERE_SELF_RADIUS - gen * SPHERE_STEP)
+}
+
+// ── Population-aware shell sizing ────────────────────────────────────────────
+// Mirrors the cone's population-aware rings: each shell is sized so its nodes
+// keep roughly the same nearest-neighbour spacing the cone uses (~100 units),
+// instead of being crammed onto a fixed-radius sphere. For an even spread the
+// nearest-neighbour distance d ≈ 4r/√count, so r = d·√count/4. Sparse shells
+// clamp to a floor; adjacent shells are kept a minimum radial gap apart so
+// generations stay visually separated (the old fixed step merged them into one
+// dense ball).
+export const SPHERE_NODE_SPACING = 120   // target nearest-neighbour distance on a shell
+export const SPHERE_MIN_RADIUS   = 300   // floor radius for sparse shells
+export const SPHERE_SHELL_GAP    = 200   // minimum radial separation between shells
+
+export function sphereRadiusForCount(count) {
+  return Math.max(
+    SPHERE_MIN_RADIUS,
+    (SPHERE_NODE_SPACING * Math.sqrt(Math.max(1, count))) / 4,
+  )
+}
+
+// Build a gen → shell-radius map that is both population-aware and ordered:
+// process innermost (highest gen / ancestors) outward, never letting a shell
+// be closer than SPHERE_SHELL_GAP to the one inside it. This guarantees shells
+// never cross even when an inner generation is densely populated.
+export function sphereRadiiByGen(counts) {
+  const gens  = [...counts.keys()].sort((a, b) => b - a)  // innermost (high gen) first
+  const radii = new Map()
+  let running = 0
+  for (const g of gens) {
+    const want = sphereRadiusForCount(counts.get(g) ?? 1)
+    const r    = Math.max(want, running + SPHERE_SHELL_GAP)
+    radii.set(g, r)
+    running = r
+  }
+  return radii
 }
 
 // Shell labels for LayoutGuides
@@ -130,7 +166,9 @@ const SphereLayout = {
 
     for (const gen of gensSorted) {
       const genNodes = byGen.get(gen)
-      const r = sphereShellRadius(gen)
+      // Use the population-aware radius the store stamped onto each node; fall
+      // back to the legacy fixed radius only if it's somehow missing.
+      const r = genNodes[0]?.orbitRadius ?? sphereShellRadius(gen)
 
       // Process spouses together so they start adjacent on the shell
       const placed = new Set()
@@ -192,7 +230,10 @@ const SphereLayout = {
     }
   },
 
-  physics: { repulsion: 18000, attraction: 0.00025, damping: 0.88 },
+  // Larger, population-sized shells mean nodes sit farther apart, so repulsion
+  // (∝ 1/dist²) is weaker between them — bump it a little to keep them fanned
+  // out across the shell surface rather than clumping where parents placed them.
+  physics: { repulsion: 26000, attraction: 0.00025, damping: 0.88 },
 }
 
 export default SphereLayout

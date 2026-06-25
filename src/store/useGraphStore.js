@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { api } from '../lib/api'
 import { redirectToLogin } from '../lib/auth'
 import { getLayout } from '../layouts'
-import SphereLayout, { getSphereOrbitRadius, sphereShellRadius } from '../layouts/SphereLayout'
+import SphereLayout, { getSphereOrbitRadius, sphereShellRadius, sphereRadiiByGen } from '../layouts/SphereLayout'
 import { coneRingRadiusForCount } from '../layouts/ConeLayout'
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -266,12 +266,23 @@ const useGraphStore = create((set, get) => ({
   setLayout(id) {
     const layout = getLayout(id)
     const { nodes, edges } = get()
-    // Recalculate orbitRadius for the target layout before positioning.
-    // Cone rings are sized by their population; sphere shells by generation.
+    // Recalculate orbitRadius for the target layout before positioning. Both
+    // cone rings and sphere shells are now sized by their population.
     const coneRadius = id === 'cone' ? coneRadiusByGen(nodes) : null
+    let sphereRadii = null
+    if (id === 'sphere') {
+      const counts = new Map()
+      for (const n of nodes) {
+        const g = n.generation ?? 0
+        counts.set(g, (counts.get(g) ?? 0) + 1)
+      }
+      sphereRadii = sphereRadiiByGen(counts)
+    }
     const reRadiused = nodes.map(n => {
       const gen = n.generation ?? 0
-      const r   = id === 'cone' ? coneRadius(gen) : sphereShellRadius(gen)
+      const r   = id === 'cone'
+        ? coneRadius(gen)
+        : (sphereRadii ? sphereRadii.get(gen) : sphereShellRadius(gen))
       return { ...n, orbitRadius: r }
     })
     const posMap = typeof layout.getInitialPositions === 'function'
@@ -404,21 +415,20 @@ const useGraphStore = create((set, get) => ({
       const gens = computeGenerations3D(storeNodes, storeEdges)
 
       // ── Step 2: Apply BFS generations + recalculate orbitRadius ─────────
-      // For the cone, size each generation's ring by how many people land on it
-      // (population-aware) so rings stay readable for any family size.
-      let coneCounts = null
-      if (layout.id === 'cone') {
-        coneCounts = new Map()
-        for (const n of storeNodes) {
-          const g = gens.get(n.id) ?? n.generation
-          coneCounts.set(g, (coneCounts.get(g) ?? 0) + 1)
-        }
+      // Size each generation's ring (cone) or shell (sphere) by how many people
+      // land on it (population-aware) so spacing stays readable for any family
+      // size — densely populated generations get larger rings/shells.
+      const genCounts = new Map()
+      for (const n of storeNodes) {
+        const g = gens.get(n.id) ?? n.generation
+        genCounts.set(g, (genCounts.get(g) ?? 0) + 1)
       }
+      const sphereRadii = layout.id === 'sphere' ? sphereRadiiByGen(genCounts) : null
       storeNodes = storeNodes.map(n => {
         const gen = gens.get(n.id) ?? n.generation
         const r   = layout.id === 'cone'
-          ? coneRingRadiusForCount(coneCounts.get(gen) ?? 1)
-          : shellRadius(n)
+          ? coneRingRadiusForCount(genCounts.get(gen) ?? 1)
+          : (sphereRadii ? sphereRadii.get(gen) : shellRadius(n))
         return { ...n, generation: gen, orbitRadius: r }
       })
 

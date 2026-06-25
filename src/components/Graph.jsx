@@ -148,6 +148,18 @@ export default function Graph() {
     return [...byGen.values()]
   }, [currentLayout, nodes])
 
+  // Sphere shell guides are likewise derived from the actual nodes so the drawn
+  // shells match the population-sized radius each generation sits on.
+  const sphereShells = useMemo(() => {
+    if (currentLayout !== 'sphere') return []
+    const byGen = new Map()
+    nodes.forEach((n) => {
+      const g = n.generation ?? 0
+      if (!byGen.has(g)) byGen.set(g, { gen: g, r: n.orbitRadius ?? 550 })
+    })
+    return [...byGen.values()]
+  }, [currentLayout, nodes])
+
   return (
     <>
       <OrbitControls
@@ -161,7 +173,7 @@ export default function Graph() {
       <pointLight position={[500, 500, 500]} intensity={1.0} />
 
       {/* Layout visual guides — shells, rings, or lines for the active layout */}
-      {showShells && <LayoutGuides layoutId={currentLayout} coneRings={coneRings} />}
+      {showShells && <LayoutGuides layoutId={currentLayout} coneRings={coneRings} sphereShells={sphereShells} />}
 
       {showEdges && edges.map((edge) => {
         // Only draw parent/spouse relations — sibling links are intentionally
