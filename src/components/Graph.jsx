@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { OrbitControls, Line } from '@react-three/drei'
-import { useThree, useFrame } from '@react-three/fiber'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import useGraphStore from '../store/useGraphStore'
 import { useSimulation } from '../physics/useSimulation'
@@ -18,10 +18,10 @@ export default function Graph() {
   const currentLayout  = useGraphStore((s) => s.currentLayout)
   const pathResults    = useGraphStore((s) => s.pathResults)
 
-  const { camera } = useThree()
-
   // fly-to target: { x, y, z } or null
   const flyTarget = useRef(null)
+  // throttle counter for the dynamic far-plane recompute
+  const farTick = useRef(0)
 
   // Load the family graph from the API on mount.
   useEffect(() => {
@@ -56,18 +56,43 @@ export default function Graph() {
     }
   }, [selectedNodeId, currentLayout])
 
-  // lerp camera toward fly-to target each frame
-  useFrame(() => {
-    if (!flyTarget.current) return
-    const t = flyTarget.current
-    camera.position.x += (t.x - camera.position.x) * 0.05
-    camera.position.y += (t.y - camera.position.y) * 0.05
-    camera.position.z += (t.z - camera.position.z) * 0.05
-    // stop lerping once close enough
-    const dx = t.x - camera.position.x
-    const dy = t.y - camera.position.y
-    const dz = t.z - camera.position.z
-    if (dx * dx + dy * dy + dz * dz < 4) flyTarget.current = null
+  // lerp camera toward fly-to target each frame. We mutate the camera via the
+  // useFrame `state` argument (the standard r3f pattern) rather than a closure
+  // over useThree()'s camera.
+  useFrame((state) => {
+    const camera = state.camera
+    if (flyTarget.current) {
+      const t = flyTarget.current
+      camera.position.x += (t.x - camera.position.x) * 0.05
+      camera.position.y += (t.y - camera.position.y) * 0.05
+      camera.position.z += (t.z - camera.position.z) * 0.05
+      // stop lerping once close enough
+      const dx = t.x - camera.position.x
+      const dy = t.y - camera.position.y
+      const dz = t.z - camera.position.z
+      if (dx * dx + dy * dy + dz * dz < 4) flyTarget.current = null
+    }
+
+    // ── Dynamic far-plane (throttled) ──────────────────────────────────────
+    // Population-sized rings can push nodes thousands of units out; a fixed far
+    // plane clips them away. Every ~20 frames, size the far plane to the graph's
+    // actual extent plus the camera's current distance so nothing is culled.
+    if ((farTick.current = (farTick.current + 1) % 20) === 0) {
+      const ns = useGraphStore.getState().nodes
+      let maxD2 = 0
+      for (const n of ns) {
+        const d2 = n.x * n.x + n.y * n.y + n.z * n.z
+        if (d2 > maxD2) maxD2 = d2
+      }
+      const maxD   = Math.sqrt(maxD2)
+      const camD   = camera.position.length()
+      const needed = Math.max(3000, camD + maxD + 1500)
+      // Only touch the projection matrix when it meaningfully changes.
+      if (needed > camera.far || needed < camera.far * 0.6) {
+        camera.far = needed
+        camera.updateProjectionMatrix()
+      }
+    }
   })
 
   useSimulation()

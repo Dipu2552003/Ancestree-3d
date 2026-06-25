@@ -1,3 +1,5 @@
+import useIsMobile from '../lib/useIsMobile'
+
 const NODE_STATES = [
   { label: 'You',      color: '#EA580C' },
   { label: 'Member',   color: '#6c63ff' },
@@ -7,6 +9,11 @@ const NODE_STATES = [
 ]
 
 export default function Legend() {
+  const isMobile = useIsMobile()
+  // On phones the legend would sit on top of the bottom control pill, so we
+  // drop it — the node colours are self-explanatory at that size.
+  if (isMobile) return null
+
   return (
     <div style={s.panel}>
       <p style={s.heading}>Node States</p>

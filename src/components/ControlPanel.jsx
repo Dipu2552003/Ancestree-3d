@@ -1,20 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import useGraphStore from '../store/useGraphStore'
-
-// ── Responsive helper ─────────────────────────────────────────────
-// All styling here is inline, so we detect the viewport width with a
-// tiny resize hook and branch the layout on `isMobile`.
-function useIsMobile(breakpoint = 640) {
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' && window.innerWidth <= breakpoint
-  )
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= breakpoint)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [breakpoint])
-  return isMobile
-}
+import useIsMobile from '../lib/useIsMobile'
 
 // ── Layout / style option definitions ─────────────────────────────────────────
 const LAYOUT_OPTIONS = [

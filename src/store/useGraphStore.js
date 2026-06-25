@@ -321,21 +321,30 @@ const useGraphStore = create((set, get) => ({
       ;(adj[e.sourceId] ??= []).push(e.targetId)
       ;(adj[e.targetId] ??= []).push(e.sourceId)
     }
-    // DFS to find all simple paths (max depth 12, max 30 results)
-    const results = []
-    function dfs(cur, target, visited, path) {
-      if (results.length >= 30) return
-      if (path.length > 13) return
-      if (cur === target) { results.push([...path]); return }
+    // BFS for the single shortest connection (fewest hops). We only surface the
+    // shortest path — not every possible route — so the panel and the 3D
+    // highlight stay focused and readable on big graphs.
+    const prev    = new Map()
+    const visited = new Set([pathSource])
+    const queue   = [pathSource]
+    let found = false
+    while (queue.length > 0) {
+      const cur = queue.shift()
+      if (cur === id) { found = true; break }
       for (const nb of (adj[cur] ?? [])) {
         if (!visited.has(nb)) {
-          visited.add(nb); path.push(nb)
-          dfs(nb, target, visited, path)
-          path.pop(); visited.delete(nb)
+          visited.add(nb)
+          prev.set(nb, cur)
+          queue.push(nb)
         }
       }
     }
-    dfs(pathSource, id, new Set([pathSource]), [pathSource])
+    const results = []
+    if (found) {
+      const path = []
+      for (let c = id; c !== undefined; c = prev.get(c)) path.unshift(c)
+      results.push(path)
+    }
     set({ pathTarget: id, pathResults: results })
   },
 

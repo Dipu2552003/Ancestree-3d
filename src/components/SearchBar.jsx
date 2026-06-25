@@ -57,10 +57,12 @@ function categoryColor(cat) {
 const styles = {
   wrapper: {
     position: 'fixed',
-    top: 20,
-    left: 20,
+    top: 16,
+    left: 16,
     zIndex: 100,
-    width: 240,
+    // Cap to the viewport on small screens so the box never runs off-edge.
+    width: 'min(240px, calc(100vw - 32px))',
+    maxWidth: 'calc(100vw - 32px)',
     fontFamily: 'system-ui, sans-serif',
   },
   input: {
@@ -83,7 +85,8 @@ const styles = {
     backdropFilter: 'blur(8px)',
     border: '1px solid rgba(255,255,255,0.1)',
     borderRadius: 8,
-    overflow: 'hidden',
+    maxHeight: '50vh',
+    overflowY: 'auto',
   },
   item: {
     display: 'flex',

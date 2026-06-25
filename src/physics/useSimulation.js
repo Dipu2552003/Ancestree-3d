@@ -8,6 +8,7 @@
 //   • Attraction — edge-connected nodes pull toward each other (string analogy)
 //   • Layout constraint — applied after integration (sphere snap, cone rings, etc.)
 
+import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import useGraphStore from '../store/useGraphStore'
 import { getLayout } from '../layouts'
@@ -15,10 +16,31 @@ import { getLayout } from '../layouts'
 // Fallback physics constants (overridden per-layout via layout.physics)
 const DEFAULTS = { repulsion: 14000, attraction: 0.0002, damping: 0.88 }
 
+// ── Freeze-on-settle ──────────────────────────────────────────────────────────
+// A family graph is static — once nodes stop moving there is nothing to compute.
+// We measure mean kinetic energy each tick; after the graph stays below
+// SETTLE_EPS for SETTLE_FRAMES consecutive frames we stop running the (O(n²))
+// simulation and stop writing to the store, so React goes fully idle. Any
+// structural change (add/remove node, edge change, layout switch) re-heats it.
+const SETTLE_EPS    = 0.02   // mean per-node velocity² considered "at rest"
+const SETTLE_FRAMES = 45     // calm frames required before freezing
+
 export function useSimulation() {
+  // { calm: consecutive calm frames, sig: last structural signature }
+  const settle = useRef({ calm: 0, sig: '' })
+
   useFrame(() => {
     const { nodes, edges, currentLayout } = useGraphStore.getState()
     if (nodes.length === 0) return
+
+    // Re-heat whenever the graph structure changes.
+    const sig = `${nodes.length}:${edges.length}:${currentLayout}`
+    if (sig !== settle.current.sig) {
+      settle.current.sig = sig
+      settle.current.calm = 0
+    }
+    // Frozen: graph is at rest — skip the whole tick (no compute, no setState).
+    if (settle.current.calm > SETTLE_FRAMES) return
 
     const layout = getLayout(currentLayout)
     const { repulsion, attraction, damping } = { ...DEFAULTS, ...layout.physics }
@@ -217,6 +239,7 @@ export function useSimulation() {
     }
 
     // ── Integrate + layout constraint ──────────────────────────────────────
+    let energy = 0
     const updated = nodes.map((n, i) => {
       let vx = (n.vx + fx[i]) * damping
       let vy = (n.vy + fy[i]) * damping
@@ -228,8 +251,17 @@ export function useSimulation() {
 
       // Delegate position + velocity clamping to the active layout
       const constrained = layout.constrain(nx, ny, nz, vx, vy, vz, n)
+      const cvx = constrained.vx ?? vx
+      const cvy = constrained.vy ?? vy
+      const cvz = constrained.vz ?? vz
+      energy += cvx * cvx + cvy * cvy + cvz * cvz
       return { ...n, ...constrained }
     })
+
+    // Track settling: increment the calm counter while the graph is near-still,
+    // reset the moment it picks up motion again.
+    if (energy / nodes.length < SETTLE_EPS) settle.current.calm++
+    else settle.current.calm = 0
 
     useGraphStore.setState({ nodes: updated })
   })

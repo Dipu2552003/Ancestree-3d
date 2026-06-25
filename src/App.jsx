@@ -42,7 +42,10 @@ export default function App() {
       <Legend />
       <PathPanel />
       <Canvas
-        camera={{ position: [0, 250, 900], fov: 55, near: 1, far: 3000 }}
+        // `far` starts generous and is then auto-expanded in Graph.jsx based on
+        // the graph's actual extent — large families (population-sized rings)
+        // can spread well past the old 3000-unit plane and would get clipped.
+        camera={{ position: [0, 250, 900], fov: 55, near: 1, far: 12000 }}
         gl={{ antialias: true, alpha: true }}
       >
         <Graph />
