@@ -120,7 +120,11 @@ export function useSimulation() {
     // tangential component of force is meaningful here.
     if (currentLayout === 'cone') {
       const ANGULAR_K = 0.055   // direct-edge angular attraction strength
-      const SIBLING_K = 0.020   // shared-parent sibling attraction (weaker)
+      // Sibling cohesion must be strong enough to resist each parent being
+      // pulled toward its own children (which otherwise splits a sibling group
+      // when siblings have kids at different angles). Repulsion still prevents
+      // them from collapsing onto each other.
+      const SIBLING_K = 0.045   // shared-parent sibling attraction
 
       // Smallest signed angle difference, wrapped to (−π, π]
       function wrapDelta(d) {

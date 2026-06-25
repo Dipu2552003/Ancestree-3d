@@ -106,11 +106,11 @@ const ConeLayout = {
     return { x: r * Math.cos(angle), y, z: r * Math.sin(angle) }
   },
 
-  // Batch placement: distributes nodes evenly per generation ring.
-  // Processes generations top-down (ancestors first) so each generation
-  // can sort its nodes by their parents' already-computed angles.
-  // This ensures siblings start adjacent and children start near their
-  // parents — drastically reducing the angular distance the physics must cover.
+  // Batch placement: distributes nodes evenly per generation ring (full 360°)
+  // while keeping each sibling group as ONE contiguous block. Processes
+  // generations top-down (ancestors first) so each block can be ordered by its
+  // parents' already-computed angles. Grouping by exact parent set guarantees
+  // siblings stay together instead of being interleaved with cousins.
   getInitialPositions(nodes, edges) {
     const spouseOf = buildSpouseMap(edges)
 
@@ -140,10 +140,24 @@ const ConeLayout = {
       // Ring radius scales with this generation's population.
       const r = coneRingRadiusForCount(genNodes.length)
 
-      // Compute each node's "parent angle" — circular mean of its parents' XZ angles.
-      // Nodes whose parents are not yet placed (or have no parents) get null.
-      const withParentAngle = genNodes.map(n => {
-        const pIds = parentsOf[n.id] ?? []
+      // ── Bucket nodes into sibling groups by their exact parent set ───────
+      // Every child of the same parents lands in one block. Parentless nodes
+      // (married-in spouses, roots) each get their own block so they never
+      // wedge into an unrelated sibling group.
+      const groups = new Map()   // parentKey → [nodes]
+      const order  = []          // first-seen key order
+      for (const n of genNodes) {
+        const pids = (parentsOf[n.id] ?? []).slice().sort()
+        const key  = pids.length ? pids.join('|') : `solo:${n.id}`
+        if (!groups.has(key)) { groups.set(key, []); order.push(key) }
+        groups.get(key).push(n)
+      }
+
+      // For each block, compute its "parent angle" — circular mean of the
+      // shared parents' XZ angles — so blocks can be ordered around the ring.
+      const blocks = order.map(key => {
+        const gnodes = groups.get(key)
+        const pIds   = parentsOf[gnodes[0].id] ?? []
         let sinSum = 0, cosSum = 0, hits = 0
         for (const pid of pIds) {
           const p = positions.get(pid)
@@ -151,28 +165,35 @@ const ConeLayout = {
           const a = Math.atan2(p.z, p.x)
           sinSum += Math.sin(a); cosSum += Math.cos(a); hits++
         }
-        return { node: n, parentAngle: hits > 0 ? Math.atan2(sinSum, cosSum) : null }
+        return {
+          nodes: gnodes,
+          parentAngle: hits > 0 ? Math.atan2(sinSum, cosSum) : null,
+          hasSelf: gnodes.some(n => n.isSelf),
+        }
       })
 
-      // Sort: self first (anchors the ring at angle 0), then by parent angle
-      // (so siblings with the same parents stay adjacent), orphans at the end.
-      withParentAngle.sort((a, b) => {
-        if (a.node.isSelf) return -1
-        if (b.node.isSelf) return 1
+      // Order blocks: self block first (anchors the ring), then by parent angle,
+      // parentless blocks last. Sibling blocks stay intact as units.
+      blocks.sort((a, b) => {
+        if (a.hasSelf) return -1
+        if (b.hasSelf) return 1
         if (a.parentAngle !== null && b.parentAngle !== null) return a.parentAngle - b.parentAngle
         if (a.parentAngle !== null) return -1
         if (b.parentAngle !== null) return 1
         return 0
       })
 
-      // Keep spouse pairs adjacent (does not change sibling grouping order).
-      const sorted = arrangeWithSpouses(withParentAngle.map(x => x.node), spouseOf)
+      // Flatten blocks → one ordered list (siblings contiguous), then pull
+      // spouse pairs adjacent. A married-in spouse sits beside its partner
+      // inside the block; cousins never land between two siblings.
+      const flat = []
+      for (const b of blocks) flat.push(...b.nodes)
+      const sorted = arrangeWithSpouses(flat, spouseOf)
       const count  = sorted.length
 
-      // Start the ring at the first node's parent angle so children start
-      // near their parents angularly.  Fall back to 0 for orphan generations.
-      const firstItem = withParentAngle.find(x => x.node.id === sorted[0].id)
-      const startAngle = firstItem?.parentAngle ?? 0
+      // Anchor the ring start at the first block's parent angle; the ring still
+      // spans a full 360° with all nodes evenly spaced.
+      const startAngle = blocks[0]?.parentAngle ?? 0
 
       sorted.forEach((node, i) => {
         const angle = startAngle + (2 * Math.PI * i) / count
