@@ -16,6 +16,7 @@ export default function Graph() {
   const showShells     = useGraphStore((s) => s.showShells)
   const showEdges      = useGraphStore((s) => s.showEdges)
   const currentLayout  = useGraphStore((s) => s.currentLayout)
+  const pathResults    = useGraphStore((s) => s.pathResults)
 
   const { camera } = useThree()
 
@@ -77,6 +78,23 @@ export default function Graph() {
     return m
   }, [nodes])
 
+  // Among all found paths, pick the shortest connection (fewest hops) and
+  // collect its consecutive node pairs as undirected edge keys. Edges in this
+  // set get highlighted; every other edge is dulled while paths are shown.
+  const shortestPathEdges = useMemo(() => {
+    if (!pathResults || pathResults.length === 0) return null
+    let best = null
+    for (const p of pathResults) {
+      if (!best || p.length < best.length) best = p
+    }
+    const set = new Set()
+    for (let i = 1; i < best.length; i++) {
+      set.add(`${best[i - 1]}|${best[i]}`)
+      set.add(`${best[i]}|${best[i - 1]}`)
+    }
+    return set
+  }, [pathResults])
+
   // Cone guide rings are derived from the actual nodes so the drawn circles
   // always match the population-sized rings the nodes sit on. One entry per
   // generation: its Y height and (shared) ring radius.
@@ -106,10 +124,20 @@ export default function Graph() {
       {showShells && <LayoutGuides layoutId={currentLayout} coneRings={coneRings} />}
 
       {showEdges && edges.map((edge) => {
+        // Only draw parent/spouse relations — sibling links are intentionally
+        // not rendered (siblings are already grouped on the same ring).
+        if ((edge.relType ?? '').toUpperCase() === 'SIBLING_OF') return null
         const src = nodeMap[edge.sourceId]
         const tgt = nodeMap[edge.targetId]
         if (!src || !tgt) return null
-        return <Edge key={edge.id} edge={edge} sourceNode={src} targetNode={tgt} />
+        // While paths are shown: highlight the shortest one, dull the rest.
+        let pathState = null
+        if (shortestPathEdges) {
+          pathState = shortestPathEdges.has(`${edge.sourceId}|${edge.targetId}`)
+            ? 'highlight'
+            : 'dull'
+        }
+        return <Edge key={edge.id} edge={edge} sourceNode={src} targetNode={tgt} pathState={pathState} />
       })}
 
       {nodes.map((node) => (

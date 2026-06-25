@@ -17,12 +17,22 @@ const EDGE_VISUAL = {
   inlaw:  { color: '#C4A882',          lineWidth: 1,   opacity: 0.45, dashed: true, dashSize: 8, gapSize: 4 },
 }
 
-export default function LineStyle({ edge, sourceNode, targetNode }) {
+export default function LineStyle({ edge, sourceNode, targetNode, pathState }) {
   const points = [
     [sourceNode.x, sourceNode.y, sourceNode.z],
     [targetNode.x, targetNode.y, targetNode.z],
   ]
-  const { color, lineWidth, opacity, dashed, dashSize, gapSize } = EDGE_VISUAL[edgeCategory(edge?.relType)]
+  let { color, lineWidth, opacity, dashed, dashSize, gapSize } = EDGE_VISUAL[edgeCategory(edge?.relType)]
+
+  // Path mode: emphasise the shortest connection, fade everything else.
+  if (pathState === 'highlight') {
+    color = '#22C55E'
+    lineWidth = 3
+    opacity = 1
+    dashed = false
+  } else if (pathState === 'dull') {
+    opacity = opacity * 0.15
+  }
 
   return (
     <Line

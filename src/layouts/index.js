@@ -12,7 +12,7 @@ const LAYOUTS = {
 }
 
 export function getLayout(id) {
-  return LAYOUTS[id] ?? SphereLayout
+  return LAYOUTS[id] ?? ConeLayout
 }
 
 export { SphereLayout, ConeLayout }

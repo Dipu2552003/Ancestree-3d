@@ -259,7 +259,7 @@ const useGraphStore = create((set, get) => ({
   // removed 'force'/'tree'/'helix') falls back to sphere.
   currentLayout:    ['sphere', 'cone'].includes(localStorage.getItem('kg_layout'))
     ? localStorage.getItem('kg_layout')
-    : 'sphere',
+    : 'cone',
   currentNodeStyle: localStorage.getItem('kg_nodestyle') ?? 'polaroid',
   currentEdgeStyle: localStorage.getItem('kg_edgestyle') ?? 'line',
 

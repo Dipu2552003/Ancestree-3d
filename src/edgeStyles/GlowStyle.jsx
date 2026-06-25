@@ -18,20 +18,29 @@ const EDGE_GLOW = {
   inlaw:  { halo: '#C4A882',           core: '#D4B892'          },
 }
 
-export default function GlowStyle({ edge, sourceNode, targetNode }) {
+export default function GlowStyle({ edge, sourceNode, targetNode, pathState }) {
   const points = [
     [sourceNode.x, sourceNode.y, sourceNode.z],
     [targetNode.x, targetNode.y, targetNode.z],
   ]
   const cat    = edgeCategory(edge?.relType)
-  const { halo, core } = EDGE_GLOW[cat]
+  let { halo, core } = EDGE_GLOW[cat]
   const dashed = cat === 'inlaw'
   const dashProps = dashed ? { dashed: true, dashSize: 10, gapSize: 5 } : { dashed: false }
 
+  // Path mode: emphasise the shortest connection, fade everything else.
+  let haloWidth = 3, coreWidth = 1, haloOpacity = 0.12, coreOpacity = 0.65
+  if (pathState === 'highlight') {
+    halo = '#22C55E'; core = '#86EFAC'
+    haloWidth = 5; coreWidth = 2; haloOpacity = 0.35; coreOpacity = 1
+  } else if (pathState === 'dull') {
+    haloOpacity *= 0.15; coreOpacity *= 0.15
+  }
+
   return (
     <>
-      <Line points={points} color={halo} lineWidth={3} transparent opacity={0.12} {...dashProps} />
-      <Line points={points} color={core} lineWidth={1} transparent opacity={0.65} {...dashProps} />
+      <Line points={points} color={halo} lineWidth={haloWidth} transparent opacity={haloOpacity} {...dashProps} />
+      <Line points={points} color={core} lineWidth={coreWidth} transparent opacity={coreOpacity} {...dashProps} />
     </>
   )
 }
