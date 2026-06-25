@@ -22,6 +22,10 @@ export default function PathPanel() {
   const isDark         = useGraphStore((s) => s.isDark)
   const isMobile       = useIsMobile()
 
+  // Collapse the result into a single "name1 → name2" row so the graph is free
+  // to explore; tapping the row expands the full shortest-connection list again.
+  const [minimized, setMinimized] = useState(false)
+
   if (!pathMode) return null
 
   const nameOf      = (id) => nodes.find((n) => n.id === id)?.label ?? id
@@ -92,50 +96,84 @@ export default function PathPanel() {
 
       {/* Body */}
       <div style={{ overflowY: 'auto', padding: '14px 15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* ── Start slot ── */}
-        {sourceNode
-          ? <SelectedSlot node={sourceNode} accent={START_COLOR} label="From" theme={t} onChange={() => setPathSource(null)} />
-          : <PersonSearch  accent={START_COLOR} placeholder="Search the first person…" nodes={nodes} excludeId={pathTarget} theme={t} onSelect={setPathSource} />
-        }
+        {step !== 3 ? (
+          <>
+            {/* ── Start slot ── */}
+            {sourceNode
+              ? <SelectedSlot node={sourceNode} accent={START_COLOR} label="From" theme={t} onChange={() => setPathSource(null)} />
+              : <PersonSearch  accent={START_COLOR} placeholder="Search the first person…" nodes={nodes} excludeId={pathTarget} theme={t} onSelect={setPathSource} />
+            }
 
-        {/* ── End slot — revealed once the first is chosen (and kept visible
-               if it was already set while re-choosing the first) ── */}
-        {(pathSource || pathTarget) && (
-          targetNode
-            ? <SelectedSlot node={targetNode} accent={END_COLOR} label="To" theme={t} onChange={() => setPathTarget(null)} />
-            : <PersonSearch  accent={END_COLOR} placeholder="Search the second person…" nodes={nodes} excludeId={pathSource} theme={t} onSelect={setPathTarget} autoFocus />
-        )}
+            {/* ── End slot — revealed once the first is chosen (and kept visible
+                   if it was already set while re-choosing the first) ── */}
+            {(pathSource || pathTarget) && (
+              targetNode
+                ? <SelectedSlot node={targetNode} accent={END_COLOR} label="To" theme={t} onChange={() => setPathTarget(null)} />
+                : <PersonSearch  accent={END_COLOR} placeholder="Search the second person…" nodes={nodes} excludeId={pathSource} theme={t} onSelect={setPathTarget} autoFocus />
+            )}
+          </>
+        ) : (
+          <>
+            {/* ── Both chosen: compact "name1 → name2" summary, tap to collapse ── */}
+            <button
+              onClick={() => setMinimized((m) => !m)}
+              aria-label={minimized ? 'Expand connection' : 'Minimize'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                padding: '10px 11px', borderRadius: 11, cursor: 'pointer',
+                background: t.inputBg, border: t.border, fontFamily: 'inherit',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: START_COLOR, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {sourceNode?.label ?? nameOf(pathSource)}
+                </span>
+              </span>
+              <span style={{ color: t.arrow, fontSize: 13, flexShrink: 0 }}>→</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1, justifyContent: 'flex-end' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: END_COLOR, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {targetNode?.label ?? nameOf(pathTarget)}
+                </span>
+              </span>
+              {/* chevron — points down to expand, up to collapse */}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={t.sub} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+                style={{ flexShrink: 0, transform: minimized ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.15s' }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
 
-        {/* ── Result ── */}
-        {pathSource && pathTarget && !shortest && (
-          <p style={{ margin: 0, fontSize: 12, color: t.sub, textAlign: 'center', padding: '6px 0' }}>
-            No connection found between them
-          </p>
-        )}
+            {!minimized && !shortest && (
+              <p style={{ margin: 0, fontSize: 12, color: t.sub, textAlign: 'center', padding: '6px 0' }}>
+                No connection found between them
+              </p>
+            )}
 
-        {shortest && (
-          <div>
-            <div style={{ height: 1, background: t.fieldBorder, opacity: 0.6, margin: '0 0 10px' }} />
-            <p style={{ margin: '0 0 8px', fontSize: 10.5, color: t.sub, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
-              Shortest connection · {shortest.length - 1} step{shortest.length - 1 !== 1 ? 's' : ''}
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {shortest.map((id, idx) => (
-                <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {idx > 0 && <span style={{ fontSize: 11, color: t.arrow, paddingLeft: 9 }}>↓</span>}
-                  <span style={{
-                    fontSize: idx === 0 || idx === shortest.length - 1 ? 13 : 12,
-                    fontWeight: idx === 0 || idx === shortest.length - 1 ? 600 : 400,
-                    color: idx === 0 ? START_COLOR : idx === shortest.length - 1 ? END_COLOR : t.text,
-                    paddingLeft: idx > 0 ? 15 : 0,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {nameOf(id)}
-                  </span>
+            {!minimized && shortest && (
+              <div>
+                <p style={{ margin: '0 0 8px', fontSize: 10.5, color: t.sub, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Shortest connection · {shortest.length - 1} step{shortest.length - 1 !== 1 ? 's' : ''}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {shortest.map((id, idx) => (
+                    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {idx > 0 && <span style={{ fontSize: 11, color: t.arrow, paddingLeft: 9 }}>↓</span>}
+                      <span style={{
+                        fontSize: idx === 0 || idx === shortest.length - 1 ? 13 : 12,
+                        fontWeight: idx === 0 || idx === shortest.length - 1 ? 600 : 400,
+                        color: idx === 0 ? START_COLOR : idx === shortest.length - 1 ? END_COLOR : t.text,
+                        paddingLeft: idx > 0 ? 15 : 0,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {nameOf(id)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
