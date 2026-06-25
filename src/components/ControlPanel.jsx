@@ -19,16 +19,6 @@ const EDGE_STYLE_OPTIONS = [
 ]
 
 // ── Inline SVG icons ──────────────────────────────────────────────
-const PlusIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
-)
-const TrashIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M9 6V4h6v2" />
-  </svg>
-)
 const PathIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <path d="M3 12h18" /><path d="M3 6l6 6-6 6" /><path d="M21 6l-6 6 6 6" />
@@ -98,12 +88,6 @@ function getTheme(isDark) {
   }
 }
 
-const ORBIT_SHELLS = [
-  { label: 'Parents gen',  orbitRadius: 240 },
-  { label: 'My gen',       orbitRadius: 320 },
-  { label: 'Children gen', orbitRadius: 400 },
-]
-
 function nodeDotColor(node) {
   if (node.isSelf)                         return '#EA580C'
   if (node.isDeceased)                     return '#94A3B8'
@@ -163,15 +147,10 @@ function NavDivider({ isDark }) {
 // ── Main component ────────────────────────────────────────────────
 
 export default function ControlPanel() {
-  const [name,     setName]     = useState('')
-  const [shell,    setShell]    = useState(1)
-  const [addOpen,  setAddOpen]  = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
   const wrapperRef = useRef(null)
 
   const nodes             = useGraphStore((s) => s.nodes)
-  const addNode           = useGraphStore((s) => s.addNode)
-  const removeNode        = useGraphStore((s) => s.removeNode)
   const selectedNodeId    = useGraphStore((s) => s.selectedNodeId)
   const selectNode        = useGraphStore((s) => s.selectNode)
   const isDark            = useGraphStore((s) => s.isDark)
@@ -193,26 +172,17 @@ export default function ControlPanel() {
   const t            = getTheme(isDark)
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
 
-  // Close open popups on outside click
+  // Close the view popup on outside click
   useEffect(() => {
-    if (!addOpen && !viewOpen) return
+    if (!viewOpen) return
     const handler = (e) => {
       if (!wrapperRef.current?.contains(e.target)) {
-        setAddOpen(false)
         setViewOpen(false)
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [addOpen, viewOpen])
-
-  async function handleAdd() {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    await addNode(trimmed, ORBIT_SHELLS[shell].orbitRadius)
-    setName('')
-    setAddOpen(false)
-  }
+  }, [viewOpen])
 
   // Shared style for popup option buttons
   function optionBtnStyle(isActive) {
@@ -295,98 +265,6 @@ export default function ControlPanel() {
               {selectedNode.birthYear ? ` · b.${selectedNode.birthYear}` : ''}
             </p>
           )}
-
-          {selectedNode.canDelete && (
-            <button
-              onClick={() => removeNode(selectedNode.id)}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                padding: '7px', borderRadius: '10px',
-                border: '1px solid rgba(239,68,68,0.30)',
-                background: isDark ? 'rgba(239,68,68,0.10)' : 'rgba(239,68,68,0.06)',
-                color: '#EF4444', cursor: 'pointer', fontFamily: 'inherit',
-                fontSize: '12px', fontWeight: 500, transition: 'opacity 0.15s',
-              }}
-            >
-              <TrashIcon /> Remove Person
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── Add Person popup ── */}
-      {addOpen && (
-        <div style={{
-          background: t.panelBg,
-          border: `1px solid ${t.borderNeutral}`,
-          borderRadius: '16px',
-          padding: '14px',
-          boxShadow: t.shadow,
-          width: 'min(248px, calc(100vw - 24px))',
-          boxSizing: 'border-box',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <p style={{
-              margin: 0, fontSize: '10px', color: t.textMuted,
-              letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600,
-            }}>
-              Add Person
-            </p>
-            <button
-              onClick={() => setAddOpen(false)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textMuted, padding: '2px', display: 'flex' }}
-            >
-              <XIcon />
-            </button>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder="Full name…"
-              autoFocus
-              style={{
-                padding: '8px 10px',
-                background: t.inputBg,
-                border: `1px solid ${t.borderNeutral}`,
-                borderRadius: '9px',
-                color: t.text, fontSize: '13px', outline: 'none',
-                width: '100%', boxSizing: 'border-box', fontFamily: 'inherit',
-              }}
-            />
-            <select
-              value={shell}
-              onChange={(e) => setShell(Number(e.target.value))}
-              style={{
-                width: '100%', padding: '7px 8px',
-                background: t.inputBg,
-                border: `1px solid ${t.borderNeutral}`,
-                borderRadius: '9px',
-                color: t.text, fontSize: '12px', outline: 'none',
-                cursor: 'pointer', boxSizing: 'border-box', fontFamily: 'inherit',
-              }}
-            >
-              {ORBIT_SHELLS.map((sh, i) => (
-                <option key={sh.label} value={i}>{sh.label} shell</option>
-              ))}
-            </select>
-            <button
-              onClick={handleAdd}
-              disabled={!name.trim()}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                padding: '9px', borderRadius: '10px', border: 'none',
-                background: name.trim() ? '#EA580C' : (isDark ? 'rgba(255,255,255,0.07)' : '#F0E4D4'),
-                color: name.trim() ? '#fff' : t.textMuted,
-                fontSize: '13px', fontWeight: 600,
-                cursor: name.trim() ? 'pointer' : 'default',
-                fontFamily: 'inherit', transition: 'background 0.15s, color 0.15s',
-              }}
-            >
-              <PlusIcon /> Add Person
-            </button>
-          </div>
         </div>
       )}
 
@@ -516,23 +394,13 @@ export default function ControlPanel() {
 
         <NavDivider isDark={isDark} />
 
-        {/* + Add button */}
-        <div style={{ padding: '0 2px', flexShrink: 0 }}>
-          <AddBtn
-            open={addOpen}
-            isDark={isDark}
-            isMobile={isMobile}
-            onClick={() => { setAddOpen((v) => !v); setViewOpen(false) }}
-          />
-        </div>
-
         {/* Path Finder */}
         <NavBtn
           isDark={isDark}
           isMobile={isMobile}
           active={pathMode}
           label="Path"
-          onClick={() => { setAddOpen(false); setViewOpen(false); togglePathMode() }}
+          onClick={() => { setViewOpen(false); togglePathMode() }}
         >
           <PathIcon />
         </NavBtn>
@@ -543,7 +411,7 @@ export default function ControlPanel() {
           isMobile={isMobile}
           active={viewOpen}
           label="View"
-          onClick={() => { setAddOpen(false); setViewOpen((v) => !v) }}
+          onClick={() => setViewOpen((v) => !v)}
         >
           <LayoutIcon />
         </NavBtn>
@@ -568,35 +436,5 @@ export default function ControlPanel() {
         </NavBtn>
       </div>
     </div>
-  )
-}
-
-// Separate component so hover state is isolated
-function AddBtn({ open, isDark, isMobile, onClick }) {
-  const [hovered, setHovered] = useState(false)
-  const t = getTheme(isDark)
-  const active = open
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: '5px',
-        padding: isMobile ? '8px 12px' : '8px 14px', borderRadius: '14px',
-        background: active
-          ? (isDark ? 'rgba(234,88,12,0.15)' : 'rgba(234,88,12,0.08)')
-          : hovered
-            ? (isDark ? 'rgba(234,88,12,0.10)' : 'rgba(234,88,12,0.05)')
-            : t.addRestBg,
-        border: 'none',
-        color: active ? '#EA580C' : (hovered ? '#EA580C' : t.textMuted),
-        fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
-        cursor: 'pointer', transition: 'background 0.2s, color 0.2s',
-        letterSpacing: '0.01em',
-      }}
-    >
-      <PlusIcon /> Add
-    </button>
   )
 }

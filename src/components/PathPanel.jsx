@@ -6,12 +6,17 @@ export default function PathPanel() {
   const pathMode    = useGraphStore((s) => s.pathMode)
   const pathSource  = useGraphStore((s) => s.pathSource)
   const pathTarget  = useGraphStore((s) => s.pathTarget)
-  const pathResults = useGraphStore((s) => s.pathResults)
-  const clearPaths  = useGraphStore((s) => s.clearPaths)
-  const isDark      = useGraphStore((s) => s.isDark)
-  const isMobile    = useIsMobile()
+  const pathResults    = useGraphStore((s) => s.pathResults)
+  const clearPaths     = useGraphStore((s) => s.clearPaths)
+  const togglePathMode = useGraphStore((s) => s.togglePathMode)
+  const isDark         = useGraphStore((s) => s.isDark)
+  const isMobile       = useIsMobile()
 
   if (!pathMode) return null
+
+  // drei's <Html> nodes render with a very high z-index (up to ~16.7M), so the
+  // panel must sit above that range to stay in front of the 3D node cards.
+  const Z_ABOVE_NODES = 20000000
 
   const nameOf = (id) => nodes.find((n) => n.id === id)?.label ?? id
 
@@ -38,7 +43,7 @@ export default function PathPanel() {
     ? {
         position: 'fixed',
         left: 8, right: 8, bottom: 86,
-        zIndex: 100,
+        zIndex: Z_ABOVE_NODES,
         maxHeight: '42vh',
         display: 'flex', flexDirection: 'column',
         background: panelBg, backdropFilter: 'blur(12px)',
@@ -50,7 +55,7 @@ export default function PathPanel() {
     : {
         position: 'fixed',
         top: 24, right: 20,
-        zIndex: 100,
+        zIndex: Z_ABOVE_NODES,
         width: 280,
         maxHeight: 'calc(100vh - 48px)',
         display: 'flex', flexDirection: 'column',
@@ -83,18 +88,34 @@ export default function PathPanel() {
             {statusText}
           </p>
         </div>
-        {(pathSource || pathTarget) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          {(pathSource || pathTarget) && (
+            <button
+              onClick={clearPaths}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: subColor, fontSize: 11, padding: '4px 8px',
+                borderRadius: 6,
+              }}
+            >
+              Reset
+            </button>
+          )}
+          {/* Cancel — close the panel and exit path mode entirely */}
           <button
-            onClick={clearPaths}
+            onClick={togglePathMode}
+            aria-label="Close"
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              color: subColor, fontSize: 11, padding: '4px 8px',
-              borderRadius: 6, flexShrink: 0,
+              color: subColor, padding: '4px 6px', borderRadius: 6,
+              display: 'flex', alignItems: 'center', lineHeight: 0,
             }}
           >
-            Reset
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
           </button>
-        )}
+        </div>
       </div>
 
       {/* Result — the single shortest connection */}

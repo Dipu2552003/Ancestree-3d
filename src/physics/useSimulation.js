@@ -25,9 +25,17 @@ const DEFAULTS = { repulsion: 14000, attraction: 0.0002, damping: 0.88 }
 const SETTLE_EPS    = 0.02   // mean per-node velocity² considered "at rest"
 const SETTLE_FRAMES = 45     // calm frames required before freezing
 
+// ── Cooling (alpha) ───────────────────────────────────────────────────────────
+// All forces are scaled by a global `alpha` that decays toward 0 every tick
+// (d3-force style). Without this, the cone's angular grouping can settle into a
+// limit cycle and keep slowly revolving forever; cooling guarantees the graph
+// always comes to a full stop. Alpha resets to 1 on any structural change.
+const ALPHA_DECAY = 0.025    // per-frame cooling rate (~3.5s to fully cool)
+const ALPHA_MIN   = 0.005    // below this, alpha snaps to 0 (forces off)
+
 export function useSimulation() {
-  // { calm: consecutive calm frames, sig: last structural signature }
-  const settle = useRef({ calm: 0, sig: '' })
+  // { calm: consecutive calm frames, sig: last structural signature, alpha: cooling }
+  const settle = useRef({ calm: 0, sig: '', alpha: 1 })
 
   useFrame(() => {
     const { nodes, edges, currentLayout } = useGraphStore.getState()
@@ -38,9 +46,12 @@ export function useSimulation() {
     if (sig !== settle.current.sig) {
       settle.current.sig = sig
       settle.current.calm = 0
+      settle.current.alpha = 1
     }
     // Frozen: graph is at rest — skip the whole tick (no compute, no setState).
     if (settle.current.calm > SETTLE_FRAMES) return
+
+    const alpha = settle.current.alpha
 
     const layout = getLayout(currentLayout)
     const { repulsion, attraction, damping } = { ...DEFAULTS, ...layout.physics }
@@ -239,11 +250,12 @@ export function useSimulation() {
     }
 
     // ── Integrate + layout constraint ──────────────────────────────────────
+    // Forces are scaled by the cooling factor so motion always winds down.
     let energy = 0
     const updated = nodes.map((n, i) => {
-      let vx = (n.vx + fx[i]) * damping
-      let vy = (n.vy + fy[i]) * damping
-      let vz = (n.vz + fz[i]) * damping
+      let vx = (n.vx + fx[i] * alpha) * damping
+      let vy = (n.vy + fy[i] * alpha) * damping
+      let vz = (n.vz + fz[i] * alpha) * damping
 
       const nx = n.x + vx
       const ny = n.y + vy
@@ -257,6 +269,9 @@ export function useSimulation() {
       energy += cvx * cvx + cvy * cvy + cvz * cvz
       return { ...n, ...constrained }
     })
+
+    // Cool down: decay alpha toward 0 so forces fade and the graph stops.
+    settle.current.alpha = alpha < ALPHA_MIN ? 0 : alpha * (1 - ALPHA_DECAY)
 
     // Track settling: increment the calm counter while the graph is near-still,
     // reset the moment it picks up motion again.
