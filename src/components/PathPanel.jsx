@@ -78,6 +78,18 @@ export default function PathPanel() {
           <p style={{ margin: '4px 0 0', fontSize: 11.5, color: t.sub }}>{stepHint}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          {/* Minimize / expand — mobile only, once both people are chosen */}
+          {isMobile && step === 3 && (
+            <button onClick={() => setMinimized((m) => !m)} aria-label={minimized ? 'Expand' : 'Minimize'} style={{
+              background: 'none', border: 'none', cursor: 'pointer', color: t.sub, padding: '4px 6px', borderRadius: 6,
+              display: 'flex', alignItems: 'center', lineHeight: 0,
+            }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+                style={{ transform: minimized ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.15s' }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          )}
           {(pathSource || pathTarget) && (
             <button onClick={clearPaths} style={{
               background: 'none', border: 'none', cursor: 'pointer', color: t.sub, fontSize: 11, padding: '4px 8px', borderRadius: 6,
@@ -96,25 +108,10 @@ export default function PathPanel() {
 
       {/* Body */}
       <div style={{ overflowY: 'auto', padding: '14px 15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {step !== 3 ? (
+        {isMobile && step === 3 ? (
+          /* ── Mobile, both chosen: compact "name1 → name2" summary that the
+                header (or this row) can collapse so the graph stays explorable ── */
           <>
-            {/* ── Start slot ── */}
-            {sourceNode
-              ? <SelectedSlot node={sourceNode} accent={START_COLOR} label="From" theme={t} onChange={() => setPathSource(null)} />
-              : <PersonSearch  accent={START_COLOR} placeholder="Search the first person…" nodes={nodes} excludeId={pathTarget} theme={t} onSelect={setPathSource} />
-            }
-
-            {/* ── End slot — revealed once the first is chosen (and kept visible
-                   if it was already set while re-choosing the first) ── */}
-            {(pathSource || pathTarget) && (
-              targetNode
-                ? <SelectedSlot node={targetNode} accent={END_COLOR} label="To" theme={t} onChange={() => setPathTarget(null)} />
-                : <PersonSearch  accent={END_COLOR} placeholder="Search the second person…" nodes={nodes} excludeId={pathSource} theme={t} onSelect={setPathTarget} autoFocus />
-            )}
-          </>
-        ) : (
-          <>
-            {/* ── Both chosen: compact "name1 → name2" summary, tap to collapse ── */}
             <button
               onClick={() => setMinimized((m) => !m)}
               aria-label={minimized ? 'Expand connection' : 'Minimize'}
@@ -137,7 +134,6 @@ export default function PathPanel() {
                   {targetNode?.label ?? nameOf(pathTarget)}
                 </span>
               </span>
-              {/* chevron — points down to expand, up to collapse */}
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={t.sub} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
                 style={{ flexShrink: 0, transform: minimized ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.15s' }}>
                 <polyline points="6 9 12 15 18 9" />
@@ -149,28 +145,35 @@ export default function PathPanel() {
                 No connection found between them
               </p>
             )}
+            {!minimized && shortest && <ConnectionList shortest={shortest} nameOf={nameOf} theme={t} />}
+          </>
+        ) : (
+          /* ── Desktop (and the picking steps): full cards + connection list ── */
+          <>
+            {/* Start slot */}
+            {sourceNode
+              ? <SelectedSlot node={sourceNode} accent={START_COLOR} label="From" theme={t} onChange={() => setPathSource(null)} />
+              : <PersonSearch  accent={START_COLOR} placeholder="Search the first person…" nodes={nodes} excludeId={pathTarget} theme={t} onSelect={setPathSource} />
+            }
 
-            {!minimized && shortest && (
+            {/* End slot — revealed once the first is chosen (kept visible if it
+                was already set while re-choosing the first) */}
+            {(pathSource || pathTarget) && (
+              targetNode
+                ? <SelectedSlot node={targetNode} accent={END_COLOR} label="To" theme={t} onChange={() => setPathTarget(null)} />
+                : <PersonSearch  accent={END_COLOR} placeholder="Search the second person…" nodes={nodes} excludeId={pathSource} theme={t} onSelect={setPathTarget} autoFocus />
+            )}
+
+            {/* Result */}
+            {pathSource && pathTarget && !shortest && (
+              <p style={{ margin: 0, fontSize: 12, color: t.sub, textAlign: 'center', padding: '6px 0' }}>
+                No connection found between them
+              </p>
+            )}
+            {shortest && (
               <div>
-                <p style={{ margin: '0 0 8px', fontSize: 10.5, color: t.sub, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
-                  Shortest connection · {shortest.length - 1} step{shortest.length - 1 !== 1 ? 's' : ''}
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {shortest.map((id, idx) => (
-                    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {idx > 0 && <span style={{ fontSize: 11, color: t.arrow, paddingLeft: 9 }}>↓</span>}
-                      <span style={{
-                        fontSize: idx === 0 || idx === shortest.length - 1 ? 13 : 12,
-                        fontWeight: idx === 0 || idx === shortest.length - 1 ? 600 : 400,
-                        color: idx === 0 ? START_COLOR : idx === shortest.length - 1 ? END_COLOR : t.text,
-                        paddingLeft: idx > 0 ? 15 : 0,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {nameOf(id)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <div style={{ height: 1, background: t.fieldBorder, opacity: 0.6, margin: '0 0 10px' }} />
+                <ConnectionList shortest={shortest} nameOf={nameOf} theme={t} />
               </div>
             )}
           </>
@@ -268,6 +271,33 @@ function PersonSearch({ accent, placeholder, nodes, excludeId, theme, onSelect, 
         })}
       </div>
     </div>
+  )
+}
+
+// ── Shortest-connection list ──────────────────────────────────────────────────
+function ConnectionList({ shortest, nameOf, theme }) {
+  return (
+    <>
+      <p style={{ margin: '0 0 8px', fontSize: 10.5, color: theme.sub, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+        Shortest connection · {shortest.length - 1} step{shortest.length - 1 !== 1 ? 's' : ''}
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {shortest.map((id, idx) => (
+          <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {idx > 0 && <span style={{ fontSize: 11, color: theme.arrow, paddingLeft: 9 }}>↓</span>}
+            <span style={{
+              fontSize: idx === 0 || idx === shortest.length - 1 ? 13 : 12,
+              fontWeight: idx === 0 || idx === shortest.length - 1 ? 600 : 400,
+              color: idx === 0 ? START_COLOR : idx === shortest.length - 1 ? END_COLOR : theme.text,
+              paddingLeft: idx > 0 ? 15 : 0,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {nameOf(id)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }
 
