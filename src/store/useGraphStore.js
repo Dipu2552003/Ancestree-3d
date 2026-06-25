@@ -227,6 +227,37 @@ function computeGenerations3D(nodes, edges) {
   return gens
 }
 
+// Single shortest connection (fewest hops) between two nodes, as an array of
+// node ids, or null if they aren't connected. Shared by the canvas-click and
+// search-based path selection flows.
+function shortestPathBetween(sourceId, targetId, edges) {
+  if (!sourceId || !targetId || sourceId === targetId) return null
+  const adj = {}
+  for (const e of edges) {
+    ;(adj[e.sourceId] ??= []).push(e.targetId)
+    ;(adj[e.targetId] ??= []).push(e.sourceId)
+  }
+  const prev    = new Map()
+  const visited = new Set([sourceId])
+  const queue   = [sourceId]
+  let found = false
+  while (queue.length > 0) {
+    const cur = queue.shift()
+    if (cur === targetId) { found = true; break }
+    for (const nb of (adj[cur] ?? [])) {
+      if (!visited.has(nb)) {
+        visited.add(nb)
+        prev.set(nb, cur)
+        queue.push(nb)
+      }
+    }
+  }
+  if (!found) return null
+  const path = []
+  for (let c = targetId; c !== undefined; c = prev.get(c)) path.unshift(c)
+  return path
+}
+
 // ── store ──────────────────────────────────────────────────────────────────
 
 const useGraphStore = create((set, get) => ({
@@ -319,44 +350,29 @@ const useGraphStore = create((set, get) => ({
     }))
   },
 
+  // Canvas-click flow: first click sets the start, second sets the end.
   setPathNode(id) {
-    const { pathSource, edges } = get()
+    const { pathSource } = get()
     if (!pathSource) {
       set({ pathSource: id, pathTarget: null, pathResults: [] })
       return
     }
     if (id === pathSource) return
-    // Build undirected adjacency list
-    const adj = {}
-    for (const e of edges) {
-      ;(adj[e.sourceId] ??= []).push(e.targetId)
-      ;(adj[e.targetId] ??= []).push(e.sourceId)
-    }
-    // BFS for the single shortest connection (fewest hops). We only surface the
-    // shortest path — not every possible route — so the panel and the 3D
-    // highlight stay focused and readable on big graphs.
-    const prev    = new Map()
-    const visited = new Set([pathSource])
-    const queue   = [pathSource]
-    let found = false
-    while (queue.length > 0) {
-      const cur = queue.shift()
-      if (cur === id) { found = true; break }
-      for (const nb of (adj[cur] ?? [])) {
-        if (!visited.has(nb)) {
-          visited.add(nb)
-          prev.set(nb, cur)
-          queue.push(nb)
-        }
-      }
-    }
-    const results = []
-    if (found) {
-      const path = []
-      for (let c = id; c !== undefined; c = prev.get(c)) path.unshift(c)
-      results.push(path)
-    }
-    set({ pathTarget: id, pathResults: results })
+    get().setPathTarget(id)
+  },
+
+  // Search-based flow: either endpoint can be set/changed independently; the
+  // shortest path is recomputed whenever both ends are present.
+  setPathSource(id) {
+    const { pathTarget, edges } = get()
+    const path = pathTarget ? shortestPathBetween(id, pathTarget, edges) : null
+    set({ pathSource: id, pathResults: path ? [path] : [] })
+  },
+
+  setPathTarget(id) {
+    const { pathSource, edges } = get()
+    const path = pathSource ? shortestPathBetween(pathSource, id, edges) : null
+    set({ pathTarget: id, pathResults: path ? [path] : [] })
   },
 
   clearPaths() { set({ pathSource: null, pathTarget: null, pathResults: [] }) },
