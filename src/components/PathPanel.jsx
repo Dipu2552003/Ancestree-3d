@@ -94,13 +94,13 @@ export default function PathPanel() {
         <NodePicker
           step={1} label="Start person" accent={START_COLOR}
           selectedId={pathSource} otherId={pathTarget}
-          nodes={nodes} theme={t} nameOf={nameOf}
+          nodes={nodes} theme={t}
           onSelect={setPathSource}
         />
         <NodePicker
           step={2} label="End person" accent={END_COLOR}
           selectedId={pathTarget} otherId={pathSource}
-          nodes={nodes} theme={t} nameOf={nameOf}
+          nodes={nodes} theme={t}
           onSelect={setPathTarget}
         />
 
@@ -145,12 +145,13 @@ export default function PathPanel() {
 // Shows a search box; focusing it lists every node (filtered as you type).
 // Picking one sets that endpoint. Once chosen it shows the name as a chip with
 // a clear button so you can swap the person out.
-function NodePicker({ step, label, accent, selectedId, otherId, nodes, theme, nameOf, onSelect }) {
+function NodePicker({ step, label, accent, selectedId, otherId, nodes, theme, onSelect }) {
   const [query, setQuery]     = useState('')
   const [editing, setEditing] = useState(false)
   const ref = useRef(null)
 
-  const selected = selectedId ? nameOf(selectedId) : null
+  const selectedNode = nodes.find((n) => n.id === selectedId) ?? null
+  const selected     = selectedNode ? selectedNode.label : null
 
   useEffect(() => {
     if (!editing) return
@@ -188,11 +189,11 @@ function NodePicker({ step, label, accent, selectedId, otherId, nodes, theme, na
       {selected && !editing ? (
         // Chosen chip
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
+          display: 'flex', alignItems: 'center', gap: 10,
           padding: '8px 10px', borderRadius: 9,
           background: theme.inputBg, border: `1px solid ${accent}`,
         }}>
-          {stepBadge}
+          {selectedNode && <NodeAvatar node={selectedNode} size={30} ring={accent} />}
           <span style={{
             flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: theme.text,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -231,23 +232,71 @@ function NodePicker({ step, label, accent, selectedId, otherId, nodes, theme, na
           {results.length === 0 && (
             <li style={{ padding: '8px 12px', fontSize: 12, color: theme.sub }}>No matches</li>
           )}
-          {results.map((n) => (
-            <li
-              key={n.id}
-              onMouseDown={(e) => { e.preventDefault(); pick(n.id) }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = theme.rowHover)}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', cursor: 'pointer',
-                fontSize: 13, color: theme.text,
-              }}
-            >
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: n.color ?? '#aaaacc', flexShrink: 0 }} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.label}</span>
-            </li>
-          ))}
+          {results.map((n) => {
+            const meta = nodeMeta(n)
+            return (
+              <li
+                key={n.id}
+                onMouseDown={(e) => { e.preventDefault(); pick(n.id) }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = theme.rowHover)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer',
+                }}
+              >
+                <NodeAvatar node={n} size={30} ring={theme.fieldBorder} />
+                <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {n.label}
+                  </span>
+                  {meta && (
+                    <span style={{ fontSize: 11, color: theme.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {meta}
+                    </span>
+                  )}
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>
   )
+}
+
+// ── Avatar + meta helpers (mirrors the frontend search rows) ──────────────────
+function getInitials(name) {
+  const parts = (name ?? '').trim().split(/\s+/)
+  if (parts.length === 1) return (parts[0] || '?').slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+// Photo if available, otherwise an initials circle tinted by the node's colour.
+function NodeAvatar({ node, size = 28, ring }) {
+  const common = {
+    width: size, height: size, borderRadius: '50%', flexShrink: 0,
+    border: ring ? `1.5px solid ${ring}` : 'none', objectFit: 'cover', display: 'block',
+  }
+  if (node.photoUrl) {
+    return <img src={node.photoUrl} alt="" style={common} />
+  }
+  return (
+    <div style={{
+      ...common,
+      background: node.color ?? '#aaaacc', color: '#fff',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: Math.round(size * 0.38), fontWeight: 600, letterSpacing: '0.02em',
+    }}>
+      {getInitials(node.label ?? node.fullName)}
+    </div>
+  )
+}
+
+// Small secondary line: relationship-to-self and birth year, when present.
+function nodeMeta(node) {
+  const bits = []
+  if (node.isSelf) bits.push('You')
+  else if (node.relationshipToSelf) bits.push(node.relationshipToSelf)
+  if (node.birthYear) bits.push(`b. ${node.birthYear}`)
+  return bits.join(' · ')
 }
