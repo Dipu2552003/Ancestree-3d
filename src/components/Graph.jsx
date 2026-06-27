@@ -8,6 +8,31 @@ import Node from './Node'
 import Edge from './Edge'
 import LayoutGuides from './LayoutGuides'
 
+// Camera fly-to point for a node: a position outside its ring/shell, along the
+// node's radial, so OrbitControls (looking at the origin) frames it on screen.
+// Shared by the search-selection fly-to and the initial self-node focus.
+function computeFlyTarget(node, layout) {
+  if (layout === 'cone') {
+    // Cone: nodes sit on a horizontal XZ ring at a specific Y height. Fly to a
+    // point outside that ring at the node's Y, looking inward.
+    const xzLen = Math.sqrt(node.x * node.x + node.z * node.z) || 1
+    const viewDist = (node.orbitRadius ?? 360) + 350
+    return {
+      x: (node.x / xzLen) * viewDist,
+      y: node.y + 80,   // slightly above the ring so the node is visible
+      z: (node.z / xzLen) * viewDist,
+    }
+  }
+  // Sphere / others: fly along the 3D radial from centre outward.
+  const len = Math.sqrt(node.x * node.x + node.y * node.y + node.z * node.z) || 1
+  const dist = (node.orbitRadius ?? 320) + 250
+  return {
+    x: (node.x / len) * dist,
+    y: (node.y / len) * dist,
+    z: (node.z / len) * dist,
+  }
+}
+
 export default function Graph() {
   const nodes          = useGraphStore((s) => s.nodes)
   const edges          = useGraphStore((s) => s.edges)
@@ -28,32 +53,23 @@ export default function Graph() {
     fetchGraph()
   }, [fetchGraph])
 
+  // On first landing, frame the user's own node — same camera framing a search
+  // selection produces, but camera-only: we move the view without selecting
+  // (no highlight). Runs once so later add/remove changes don't yank the camera.
+  const didAutoFocus = useRef(false)
+  useEffect(() => {
+    if (didAutoFocus.current || nodes.length === 0) return
+    didAutoFocus.current = true
+    const self = nodes.find((n) => n.isSelf)
+    if (self) flyTarget.current = computeFlyTarget(self, useGraphStore.getState().currentLayout)
+  }, [nodes])
+
   // update fly-to target whenever selected node changes
   useEffect(() => {
     if (!selectedNodeId) { flyTarget.current = null; return }
     const node = useGraphStore.getState().nodes.find((n) => n.id === selectedNodeId)
     if (!node) return
-
-    if (currentLayout === 'cone') {
-      // Cone: nodes sit on a horizontal XZ ring at a specific Y height.
-      // Fly the camera to a point outside that ring at the node's Y, looking inward.
-      const xzLen = Math.sqrt(node.x * node.x + node.z * node.z) || 1
-      const viewDist = (node.orbitRadius ?? 360) + 350
-      flyTarget.current = {
-        x: (node.x / xzLen) * viewDist,
-        y: node.y + 80,   // slightly above the ring so the node is visible
-        z: (node.z / xzLen) * viewDist,
-      }
-    } else {
-      // Sphere / others: fly along the 3D radial from centre outward.
-      const len = Math.sqrt(node.x * node.x + node.y * node.y + node.z * node.z) || 1
-      const dist = (node.orbitRadius ?? 320) + 250
-      flyTarget.current = {
-        x: (node.x / len) * dist,
-        y: (node.y / len) * dist,
-        z: (node.z / len) * dist,
-      }
-    }
+    flyTarget.current = computeFlyTarget(node, currentLayout)
   }, [selectedNodeId, currentLayout])
 
   // lerp camera toward fly-to target each frame. We mutate the camera via the
