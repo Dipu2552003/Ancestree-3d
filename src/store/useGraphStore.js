@@ -281,7 +281,10 @@ const useGraphStore = create((set, get) => ({
 
   // view toggles
   showShells: true,
-  showEdges:  true,
+  // Edges default OFF on mobile (a dense edge mesh is unreadable on a small
+  // screen); ON elsewhere. The path feature still draws its connection overlay
+  // even when edges are hidden — see Graph.jsx.
+  showEdges:  !(typeof window !== 'undefined' && window.innerWidth <= 640),
   toggleShells() { set((s) => ({ showShells: !s.showShells })) },
   toggleEdges()  { set((s) => ({ showEdges:  !s.showEdges  })) },
 

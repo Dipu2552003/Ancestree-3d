@@ -53,15 +53,19 @@ export default function Graph() {
     fetchGraph()
   }, [fetchGraph])
 
-  // On first landing, frame the user's own node — same camera framing a search
-  // selection produces, but camera-only: we move the view without selecting
-  // (no highlight). Runs once so later add/remove changes don't yank the camera.
+  // On first landing, frame the user's own node — camera-only (no selection /
+  // highlight). The force layout keeps moving nodes for a few seconds after
+  // load, so a one-shot fly-to would aim at the self node's transient early
+  // position and then watch it drift away (the "keeps moving / never lands on
+  // me" bug). Instead we mark auto-focus pending and, in useFrame, re-aim at the
+  // self node's *live* position each frame until the camera converges on it.
+  const autoFocusing = useRef(false)
   const didAutoFocus = useRef(false)
   useEffect(() => {
     if (didAutoFocus.current || nodes.length === 0) return
+    if (!nodes.some((n) => n.isSelf)) return  // wait until the self node exists
     didAutoFocus.current = true
-    const self = nodes.find((n) => n.isSelf)
-    if (self) flyTarget.current = computeFlyTarget(self, useGraphStore.getState().currentLayout)
+    autoFocusing.current = true
   }, [nodes])
 
   // update fly-to target whenever selected node changes
@@ -77,16 +81,26 @@ export default function Graph() {
   // over useThree()'s camera.
   useFrame((state) => {
     const camera = state.camera
+
+    // While auto-focusing on load, track the self node's current position so the
+    // camera follows it as the layout settles instead of chasing a stale point.
+    if (autoFocusing.current) {
+      const self = useGraphStore.getState().nodes.find((n) => n.isSelf)
+      if (self) flyTarget.current = computeFlyTarget(self, useGraphStore.getState().currentLayout)
+      else autoFocusing.current = false
+    }
+
     if (flyTarget.current) {
       const t = flyTarget.current
       camera.position.x += (t.x - camera.position.x) * 0.05
       camera.position.y += (t.y - camera.position.y) * 0.05
       camera.position.z += (t.z - camera.position.z) * 0.05
-      // stop lerping once close enough
+      // stop lerping once close enough — only releases when the node (and thus
+      // the target) has settled, so we land squarely on the user's node.
       const dx = t.x - camera.position.x
       const dy = t.y - camera.position.y
       const dz = t.z - camera.position.z
-      if (dx * dx + dy * dy + dz * dz < 4) flyTarget.current = null
+      if (dx * dx + dy * dy + dz * dz < 4) { flyTarget.current = null; autoFocusing.current = false }
     }
 
     // ── Dynamic far-plane (throttled) ──────────────────────────────────────
@@ -183,6 +197,9 @@ export default function Graph() {
         dampingFactor={0.08}
         target={[0, 0, 0]}
         mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null }}
+        // User grabbed the camera — stop the load-time auto-focus so we don't
+        // fight them while the layout is still settling.
+        onStart={() => { autoFocusing.current = false; flyTarget.current = null }}
       />
       <ambientLight intensity={0.3} />
       <pointLight position={[0, 0, 0]} intensity={0.8} />
@@ -209,8 +226,10 @@ export default function Graph() {
       })}
 
       {/* Shortest-connection overlay — bright green polyline drawn on top of
-          everything, regardless of which underlying edges exist. */}
-      {showEdges && shortestPathPoints && (
+          everything, regardless of which underlying edges exist. Always shown
+          when a path is active, even if edges are hidden (e.g. mobile default),
+          so the path feature still reveals the connection. */}
+      {shortestPathPoints && (
         <>
           <Line points={shortestPathPoints} color="#16A34A" lineWidth={6} transparent opacity={0.35} depthTest={false} renderOrder={998} />
           <Line points={shortestPathPoints} color="#4ADE80" lineWidth={2.5} transparent opacity={1} depthTest={false} renderOrder={999} />
