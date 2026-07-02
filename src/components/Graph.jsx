@@ -95,6 +95,15 @@ export default function Graph() {
     flyTarget.current = computeFlyTarget(node, currentLayout)
   }, [selectedNodeId, currentLayout])
 
+  // Home button (ControlPanel) — fly back to the viewer's own node.
+  const homeSignal = useGraphStore((s) => s.homeSignal)
+  useEffect(() => {
+    if (homeSignal === 0) return
+    const st = useGraphStore.getState()
+    const self = st.nodes.find((n) => n.isSelf)
+    if (self) flyTarget.current = computeFlyTarget(self, st.currentLayout)
+  }, [homeSignal])
+
   // lerp camera toward fly-to target each frame. We mutate the camera via the
   // useFrame `state` argument (the standard r3f pattern) rather than a closure
   // over useThree()'s camera.

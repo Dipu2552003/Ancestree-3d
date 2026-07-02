@@ -60,6 +60,11 @@ const LayoutIcon = () => (
     <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
   </svg>
 )
+const HomeIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /><path d="M10 21v-6h4v6" />
+  </svg>
+)
 
 // ── Theme ─────────────────────────────────────────────────────────
 function getTheme(isDark) {
@@ -167,6 +172,7 @@ export default function ControlPanel() {
   const setLayout         = useGraphStore((s) => s.setLayout)
   const setNodeStyle      = useGraphStore((s) => s.setNodeStyle)
   const setEdgeStyle      = useGraphStore((s) => s.setEdgeStyle)
+  const goHome            = useGraphStore((s) => s.goHome)
 
   const isMobile     = useIsMobile()
   const t            = getTheme(isDark)
@@ -376,21 +382,16 @@ export default function ControlPanel() {
         }}
       >
 
-        {/* Brand */}
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          gap: '2px', padding: isMobile ? '8px' : '8px 12px', flexShrink: 0,
-        }}>
-          <span style={{ fontSize: '16px', lineHeight: 1 }}>🌸</span>
-          {!isMobile && (
-            <span style={{
-              fontSize: '9.5px', fontWeight: 600, color: t.text,
-              letterSpacing: '0.04em', whiteSpace: 'nowrap',
-            }}>
-              Khandelwal
-            </span>
-          )}
-        </div>
+        {/* Home — fly the camera back to the viewer's own node */}
+        <NavBtn
+          isDark={isDark}
+          isMobile={isMobile}
+          active={false}
+          label="Home"
+          onClick={() => { setViewOpen(false); goHome() }}
+        >
+          <HomeIcon />
+        </NavBtn>
 
         <NavDivider isDark={isDark} />
 

@@ -279,6 +279,11 @@ const useGraphStore = create((set, get) => ({
     })
   },
 
+  // Home button — bumping the counter tells Graph.jsx to fly the camera to
+  // the viewer's own node (see the homeSignal effect there).
+  homeSignal: 0,
+  goHome() { set((s) => ({ homeSignal: s.homeSignal + 1 })) },
+
   // view toggles
   showShells: true,
   // Edges default OFF on mobile (a dense edge mesh is unreadable on a small
