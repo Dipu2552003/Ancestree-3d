@@ -46,7 +46,11 @@ export default function App() {
         // the graph's actual extent — large families (population-sized rings)
         // can spread well past the old 3000-unit plane and would get clipped.
         camera={{ position: [0, 250, 900], fov: 55, near: 1, far: 12000 }}
-        gl={{ antialias: true, alpha: true }}
+        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+        // Cap the render resolution: uncapped devicePixelRatio (3x phones) means
+        // ~4× the pixels of 1.5x for barely visible sharpness gain — a large,
+        // silent GPU cost on exactly the devices that lag.
+        dpr={typeof window !== 'undefined' && window.innerWidth <= 640 ? [1, 1.5] : [1, 2]}
       >
         <Graph />
       </Canvas>

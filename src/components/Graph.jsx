@@ -1,12 +1,27 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { OrbitControls, Line } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import useGraphStore from '../store/useGraphStore'
 import { useSimulation } from '../physics/useSimulation'
+import useIsMobile from '../lib/useIsMobile'
 import Node from './Node'
-import Edge from './Edge'
+import NodeSprites from './NodeSprites'
+import BatchedEdges from './BatchedEdges'
 import LayoutGuides from './LayoutGuides'
+
+// ── Hybrid LOD ────────────────────────────────────────────────────────────────
+// Every node is always a GPU sprite (NodeSprites — one instanced draw call).
+// The expensive HTML polaroid card only mounts for the nodes nearest the
+// camera: each card is a live DOM subtree whose transform is recomputed every
+// frame on the main thread, so capping the card count is what keeps orbiting
+// smooth on large graphs — especially on mobile.
+const CARD_BUDGET_DESKTOP = 40
+const CARD_BUDGET_MOBILE  = 16
+const CARD_DIST_DESKTOP   = 2000
+const CARD_DIST_MOBILE    = 1400
+// Hysteresis so cards at the boundary don't flicker in/out while orbiting.
+const KEEP_MARGIN = 1.25
 
 // Camera fly-to point for a node: a position outside its ring/shell, along the
 // node's radial, so OrbitControls (looking at the origin) frames it on screen.
@@ -35,7 +50,6 @@ function computeFlyTarget(node, layout) {
 
 export default function Graph() {
   const nodes          = useGraphStore((s) => s.nodes)
-  const edges          = useGraphStore((s) => s.edges)
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId)
   const fetchGraph     = useGraphStore((s) => s.fetchGraph)
   const showShells     = useGraphStore((s) => s.showShells)
@@ -43,10 +57,15 @@ export default function Graph() {
   const currentLayout  = useGraphStore((s) => s.currentLayout)
   const pathResults    = useGraphStore((s) => s.pathResults)
 
+  const isMobile = useIsMobile()
+
   // fly-to target: { x, y, z } or null
   const flyTarget = useRef(null)
   // throttle counter for the dynamic far-plane recompute
   const farTick = useRef(0)
+  // throttle counter + current set for the near-camera card selection
+  const cardTick = useRef(0)
+  const [cardIds, setCardIds] = useState(() => new Set())
 
   // Load the family graph from the API on mount.
   useEffect(() => {
@@ -121,6 +140,48 @@ export default function Graph() {
       if (needed > camera.far || needed < camera.far * 0.6) {
         camera.far = needed
         camera.updateProjectionMatrix()
+      }
+    }
+
+    // ── Near-camera card selection (throttled) ─────────────────────────────
+    // Pick the K nearest nodes within the card distance; keep already-shown
+    // cards up to a wider margin (hysteresis) so the boundary doesn't flicker.
+    // Selected / self / path endpoints always get a card.
+    if ((cardTick.current = (cardTick.current + 1) % 15) === 0) {
+      const st = useGraphStore.getState()
+      const ns = st.nodes
+      const budget  = isMobile ? CARD_BUDGET_MOBILE : CARD_BUDGET_DESKTOP
+      const maxDist = isMobile ? CARD_DIST_MOBILE : CARD_DIST_DESKTOP
+      const maxD2   = maxDist * maxDist
+      const keepD2  = maxD2 * KEEP_MARGIN * KEEP_MARGIN
+      const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z
+
+      const byDist = []
+      for (const n of ns) {
+        const dx = n.x - cx, dy = n.y - cy, dz = n.z - cz
+        byDist.push([dx * dx + dy * dy + dz * dz, n.id])
+      }
+      byDist.sort((a, b) => a[0] - b[0])
+
+      const next = new Set()
+      // Pinned: always carded regardless of distance.
+      for (const id of [st.selectedNodeId, st.pathSource, st.pathTarget]) {
+        if (id) next.add(id)
+      }
+      const self = ns.find((n) => n.isSelf)
+      if (self) next.add(self.id)
+
+      for (const [d2, id] of byDist) {
+        if (next.size >= budget) break
+        if (d2 <= maxD2) { next.add(id); continue }
+        // hysteresis band: only nodes that already have a card survive here
+        if (d2 <= keepD2 && cardIds.has(id)) next.add(id)
+        if (d2 > keepD2) break   // sorted — nothing further qualifies
+      }
+
+      // Only commit when membership actually changed.
+      if (next.size !== cardIds.size || [...next].some((id) => !cardIds.has(id))) {
+        setCardIds(next)
       }
     }
   })
@@ -208,22 +269,10 @@ export default function Graph() {
       {/* Layout visual guides — shells, rings, or lines for the active layout */}
       {showShells && <LayoutGuides layoutId={currentLayout} coneRings={coneRings} sphereShells={sphereShells} />}
 
-      {showEdges && edges.map((edge) => {
-        // Only draw parent/spouse relations — sibling links are intentionally
-        // not rendered (siblings are already grouped on the same ring).
-        if ((edge.relType ?? '').toUpperCase() === 'SIBLING_OF') return null
-        const src = nodeMap[edge.sourceId]
-        const tgt = nodeMap[edge.targetId]
-        if (!src || !tgt) return null
-        // While paths are shown: highlight the shortest one, dull the rest.
-        let pathState = null
-        if (shortestPathEdges) {
-          pathState = shortestPathEdges.has(`${edge.sourceId}|${edge.targetId}`)
-            ? 'highlight'
-            : 'dull'
-        }
-        return <Edge key={edge.id} edge={edge} sourceNode={src} targetNode={tgt} pathState={pathState} />
-      })}
+      {/* All edges batched into two draw calls (solid + dashed in-law).
+          Sibling links are excluded inside (same-ring grouping, never drawn).
+          Path mode highlights/dulls via baked vertex colors. */}
+      {showEdges && <BatchedEdges shortestPathEdges={shortestPathEdges} />}
 
       {/* Shortest-connection overlay — bright green polyline drawn on top of
           everything, regardless of which underlying edges exist. Always shown
@@ -236,7 +285,11 @@ export default function Graph() {
         </>
       )}
 
-      {nodes.map((node) => (
+      {/* Hybrid LOD: every node is a GPU sprite; the HTML polaroid card only
+          mounts for the near-camera set (plus selected/self/path endpoints).
+          Carded nodes get their sprite hidden inside NodeSprites. */}
+      <NodeSprites hiddenIds={cardIds} />
+      {nodes.filter((n) => cardIds.has(n.id)).map((node) => (
         <Node key={node.id} node={node} />
       ))}
     </>
