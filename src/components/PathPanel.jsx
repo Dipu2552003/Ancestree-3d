@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import useGraphStore from '../store/useGraphStore'
 import useIsMobile from '../lib/useIsMobile'
 
@@ -11,6 +11,7 @@ const END_COLOR   = '#3B82F6'
 
 export default function PathPanel() {
   const nodes          = useGraphStore((s) => s.nodes)
+  const edges          = useGraphStore((s) => s.edges)
   const pathMode       = useGraphStore((s) => s.pathMode)
   const pathSource     = useGraphStore((s) => s.pathSource)
   const pathTarget     = useGraphStore((s) => s.pathTarget)
@@ -145,7 +146,7 @@ export default function PathPanel() {
                 No connection found between them
               </p>
             )}
-            {!minimized && shortest && <ConnectionList shortest={shortest} nameOf={nameOf} theme={t} />}
+            {!minimized && shortest && <ConnectionList shortest={shortest} nodes={nodes} edges={edges} theme={t} />}
           </>
         ) : (
           /* ── Desktop (and the picking steps): full cards + connection list ── */
@@ -173,7 +174,7 @@ export default function PathPanel() {
             {shortest && (
               <div>
                 <div style={{ height: 1, background: t.fieldBorder, opacity: 0.6, margin: '0 0 10px' }} />
-                <ConnectionList shortest={shortest} nameOf={nameOf} theme={t} />
+                <ConnectionList shortest={shortest} nodes={nodes} edges={edges} theme={t} />
               </div>
             )}
           </>
@@ -275,27 +276,86 @@ function PersonSearch({ accent, placeholder, nodes, excludeId, theme, onSelect, 
 }
 
 // ── Shortest-connection list ──────────────────────────────────────────────────
-function ConnectionList({ shortest, nameOf, theme }) {
+// A horizontally scrollable strip of photo cards: each person on the path shows
+// their photo (or initials) with their first name below, and the connector
+// between consecutive people carries the relationship read from that hop's edge
+// — e.g. Dipkul → Mahendra (Dipkul's Father) → Raj (Mahendra's Brother).
+
+/** How `cur` relates to `prev`, from the edge between them + cur's gender. */
+function relationLabel(prev, cur, edges) {
+  const e = edges.find((ed) =>
+    (ed.sourceId === prev.id && ed.targetId === cur.id) ||
+    (ed.sourceId === cur.id  && ed.targetId === prev.id))
+  if (!e) return ''
+  const rel = (e.relType ?? '').toUpperCase()
+  const g = cur.gender
+  let word
+  if (rel === 'PARENT_OF') {
+    word = e.sourceId === cur.id
+      ? (g === 'male' ? 'Father'  : g === 'female' ? 'Mother'   : 'Parent')
+      : (g === 'male' ? 'Son'     : g === 'female' ? 'Daughter' : 'Child')
+  } else if (rel === 'SPOUSE_OF') {
+    word =  g === 'male' ? 'Husband' : g === 'female' ? 'Wife'    : 'Spouse'
+  } else if (rel === 'SIBLING_OF') {
+    word =  g === 'male' ? 'Brother' : g === 'female' ? 'Sister'  : 'Sibling'
+  } else {
+    return ''
+  }
+  const first = (prev.label ?? '').trim().split(/\s+/)[0] || 'their'
+  return `${first}’s ${word}`
+}
+
+function ConnectionList({ shortest, nodes, edges, theme }) {
+  const nodeOf = (id) => nodes.find((n) => n.id === id) ?? { id, label: String(id) }
+  const steps  = shortest.map(nodeOf)
+  const last   = steps.length - 1
+
   return (
     <>
-      <p style={{ margin: '0 0 8px', fontSize: 10.5, color: theme.sub, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
-        Shortest connection · {shortest.length - 1} step{shortest.length - 1 !== 1 ? 's' : ''}
+      <p style={{ margin: '0 0 10px', fontSize: 10.5, color: theme.sub, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+        Shortest connection · {last} step{last !== 1 ? 's' : ''}
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {shortest.map((id, idx) => (
-          <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {idx > 0 && <span style={{ fontSize: 11, color: theme.arrow, paddingLeft: 9 }}>↓</span>}
-            <span style={{
-              fontSize: idx === 0 || idx === shortest.length - 1 ? 13 : 12,
-              fontWeight: idx === 0 || idx === shortest.length - 1 ? 600 : 400,
-              color: idx === 0 ? START_COLOR : idx === shortest.length - 1 ? END_COLOR : theme.text,
-              paddingLeft: idx > 0 ? 15 : 0,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {nameOf(id)}
-            </span>
-          </div>
-        ))}
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', overflowX: 'auto',
+        paddingBottom: 6, WebkitOverflowScrolling: 'touch',
+      }}>
+        {steps.map((n, idx) => {
+          const ring = idx === 0 ? START_COLOR : idx === last ? END_COLOR : theme.fieldBorder
+          return (
+            <Fragment key={n.id}>
+              {/* Connector: arrow + how this person relates to the previous one */}
+              {idx > 0 && (
+                <div style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  flexShrink: 0, width: 74, paddingTop: 14, gap: 2,
+                }}>
+                  <span style={{ color: theme.arrow, fontSize: 14, lineHeight: 1 }}>→</span>
+                  <span style={{
+                    fontSize: 9.5, color: theme.sub, textAlign: 'center', lineHeight: 1.25,
+                    overflowWrap: 'break-word', maxWidth: 72,
+                  }}>
+                    {relationLabel(steps[idx - 1], n, edges)}
+                  </span>
+                </div>
+              )}
+              {/* Person card: photo (or initials) + first name */}
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                flexShrink: 0, width: 62, gap: 5,
+              }}>
+                <NodeAvatar node={n} size={44} ring={ring} />
+                <span style={{
+                  fontSize: 11, fontWeight: idx === 0 || idx === last ? 700 : 500,
+                  color: idx === 0 ? START_COLOR : idx === last ? END_COLOR : theme.text,
+                  textAlign: 'center', maxWidth: 60,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {(n.label ?? '').trim().split(/\s+/)[0] || n.label}
+                </span>
+              </div>
+            </Fragment>
+          )
+        })}
       </div>
     </>
   )
